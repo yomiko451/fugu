@@ -1,6 +1,6 @@
-use iced::{widget::{container, text, Container}, Background, Color, Element, Task};
+use iced::{widget::{container, text, Container}, Background, Task, Theme};
 
-use crate::constants::EDITOR_BG_COLOR;
+use crate::constants::*;
 
 
 
@@ -30,9 +30,10 @@ impl Editor {
         container(
             text("aaa")
         )
-        .style(|_| {
+        .style(|theme: &Theme| {
+            let palette = theme.palette();
             container::Style {
-                background: Some(Background::Color(EDITOR_BG_COLOR)),
+                background: Some(Background::Color(palette.background)),
                 ..container::Style::default()
             }
         })

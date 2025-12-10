@@ -1,6 +1,6 @@
-use iced::{widget::{container, text, Container}, Background, Color, Element, Task};
+use iced::{widget::{container, text, Container}, Background, Color, Element, Task, Theme};
 
-use crate::constants::MENU_BAR_AND_STATUS_BAR_BG_COLOR;
+use crate::constants::*;
 
 
 #[derive(Debug, Clone)]
@@ -28,9 +28,10 @@ impl StatusBar {
         container(
             text("aaa")
         )
-        .style(|_| {
+        .style(|theme: &Theme| {
+            let ex_palette = theme.extended_palette();
             container::Style {
-                background: Some(Background::Color(MENU_BAR_AND_STATUS_BAR_BG_COLOR)),
+                background: Some(Background::Color(ex_palette.background.weaker.color)),
                 ..container::Style::default()
             }
         })
