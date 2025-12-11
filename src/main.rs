@@ -1,6 +1,6 @@
-use crate::{app::App, constants::{APP_NAME, DEFAULT_THEME, DEFAULT_WINDOW_SIZE}};
+use crate::{app::App, common::*};
 
-mod constants;
+mod common;
 mod editor;
 mod preview;
 mod file_panel;

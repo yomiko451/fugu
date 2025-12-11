@@ -2,12 +2,11 @@ use crate::{
     editor::{Editor, EditorMessage},
     file_panel::{FilePanel, FilePanelMessage},
     menu_bar::{MenuBar, MenuBarMessage},
-    preview::{Preview, PreviewMessage},
+    preview::{self, Preview, PreviewMessage},
     status_bar::{StatusBar, StatusBarMessage},
 };
 use iced::{
-    Element, Length, Task,
-    widget::{column, row},
+    widget::{canvas::path::lyon_path::geom::euclid::approxeq::ApproxEq, column, row}, Element, Length, Task
 };
 use tracing::{error, info, warn};
 use tracing_appender::rolling;
@@ -52,8 +51,8 @@ impl App {
             .init();
         info!("应用启动！");
         Self {
-            editor: Editor {},
-            preview: Preview {},
+            editor: Editor::new(),
+            preview: Preview::new(),
             file_panel: FilePanel::new(),
             menu_bar: MenuBar::new(),
             status_bar: StatusBar {},
@@ -62,20 +61,43 @@ impl App {
 
     pub fn update(&mut self, app_message: AppMessage) -> Task<AppMessage> {
         match app_message {
-            AppMessage::FilePanel(file_panel_message) => self
-                .file_panel
-                .update(file_panel_message)
-                .map(AppMessage::FilePanel),
+            AppMessage::FilePanel(file_panel_message) => match file_panel_message {
+                FilePanelMessage::SendFileDataToEditor(file_data) => {
+                    self.editor.update(EditorMessage::GetFileDataFromFilePanel(file_data)).map(AppMessage::Editor)
+                }
+                _ => self
+                    .file_panel
+                    .update(file_panel_message)
+                    .map(AppMessage::FilePanel)
+            },
             AppMessage::MenuBar(menu_bar_message) => match menu_bar_message {
-                MenuBarMessage::FileMenuOpenFolder => self
+                MenuBarMessage::CommandOpenFolder => self
                     .file_panel
                     .update(FilePanelMessage::OperationOpenFolder)
+                    .map(AppMessage::FilePanel),
+                MenuBarMessage::CommandOpenFile => self
+                    .file_panel
+                    .update(FilePanelMessage::OperationOpenFile)
                     .map(AppMessage::FilePanel),
                 _ => self
                     .menu_bar
                     .update(menu_bar_message)
                     .map(AppMessage::MenuBar),
             },
+            AppMessage::Editor(editor_message) => {
+                match editor_message {
+                    EditorMessage::SendInputContentToPreview(input_content) => {
+                        self.preview.update(PreviewMessage::GetInputContentFromEditor(input_content))
+                            .map(AppMessage::Preview)
+                    }
+                    _ => self.editor.update(editor_message).map(AppMessage::Editor)
+                }
+            }
+            AppMessage::Preview(preview_message) => {
+                match preview_message {
+                    _ => self.preview.update(preview_message).map(AppMessage::Preview)
+                }
+            }
             _ => Task::none(),
         }
     }
@@ -116,15 +138,17 @@ impl App {
             menu_bar.map(AppMessage::MenuBar),
             row![
                 file_panel.map(AppMessage::FilePanel),
-                editor.map(|_| AppMessage::None),
-                preview.map(|_| AppMessage::None),
+                editor.map(AppMessage::Editor),
+                preview.map(AppMessage::Preview),
             ]
             .height(Length::Fill)
             .width(Length::Fill),
-            status_bar.map(|_| AppMessage::None)
+            status_bar.map(AppMessage::StatusBar)
         ]
         .width(Length::Fill)
         .height(Length::Fill)
         .into()
     }
 }
+
+

@@ -1,5 +1,15 @@
-use std::sync::LazyLock;
+use std::{path::PathBuf, sync::LazyLock};
 use iced::{Color, Theme, theme::Palette};
+// 这里定义各种公共类型
+#[derive(Debug, Clone)]
+pub struct FileData {
+    pub name: String,
+    pub content: String,
+    pub path: PathBuf,
+    pub is_saved: bool,
+}
+
+
 //这里主要定义各种常量
 // 
 // 
@@ -29,7 +39,7 @@ pub const BORDER_WIDTH: f32 = 1.;
 // 默认背景色
 const BACKGROUND_COLOR: Color = Color::from_rgb8(40, 44, 51);
 // 默认文本色
-const TEXT_COLOR: Color = Color::from_rgb(0.83, 0.83, 0.85);
+const TEXT_COLOR: Color = Color::from_rgb8(171, 178, 191);
 // 默认主色
 const PRIMARY_COLOR: Color = Color::from_rgb8(56, 178, 172);
 // 默认成功状态色
@@ -52,7 +62,7 @@ pub const DEFAULT_THEME: LazyLock<Theme> = LazyLock::new(||{
 });
 
 // 文件区相关常量
-// 
+pub const TEXT_INDENTATION: u16 = 15;
 // 背景颜色
 //pub const FILE_PANEL_BG_COLOR: Color = Color::from_rgb8(47, 52, 62);
 // 默认文字大小

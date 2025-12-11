@@ -3,7 +3,7 @@ use iced::{
 };
 use iced_aw::{Menu, MenuBar as AWMenuBar, menu::Item};
 
-use crate::constants::*;
+use crate::common::*;
 
 #[derive(Debug, Clone)]
 pub struct MenuBar {
@@ -14,7 +14,8 @@ pub struct MenuBar {
 pub enum MenuBarMessage {
     HoverEnter(usize),
     None,
-    FileMenuOpenFolder,
+    CommandOpenFolder,
+    CommandOpenFile
 }
 
 impl MenuBar {
@@ -51,8 +52,8 @@ impl MenuBar {
             Menu::new(
                 [
                     ("新建文件", MenuBarMessage::None),
-                    ("打开文件", MenuBarMessage::None),
-                     ("打开文件夹", MenuBarMessage::FileMenuOpenFolder),
+                    ("打开文件", MenuBarMessage::CommandOpenFile),
+                     ("打开文件夹", MenuBarMessage::CommandOpenFolder),
                     ("文件另存为", MenuBarMessage::None),
                 ]
                 .into_iter()
@@ -69,18 +70,30 @@ impl MenuBar {
         )
         .close_on_click(true);
 
-        // let edit_menu = Item::with_menu(
-        //     text("编辑(E)").size(FONT_SIZE_BIGGER),
-        //     Menu::new(
-        //         [
-        //             Item::new(mouse_area(text("aaa")).on_press(MenuBarMessage::None)),
-        //             Item::new("save"),
-        //             Item::new("close"),
-        //         ]
-        //         .into(),
-        //     )
-        //     .width(MENU_WIDTH),
-        // );
+         let edit_menu  = Item::with_menu(
+             mouse_area(text("编辑(E)").size(FONT_SIZE_BASE))
+                 .interaction(mouse::Interaction::Pointer),
+             Menu::new(
+                 [
+                     ("撤销", MenuBarMessage::None),
+                     ("剪切", MenuBarMessage::None),
+                     ("复制", MenuBarMessage::None),
+                      ("粘贴", MenuBarMessage::None),
+                     ("删除", MenuBarMessage::None),
+                 ]
+                 .into_iter()
+                 .enumerate()
+                 .map(|(id, (menu_text, message))| {
+                     let item = self.generate_menu_item(menu_text.to_string(), id, message);
+                     Item::new(item)
+                 })
+                 .collect(),
+             )
+             .offset(MENU_OFFSET)
+             .padding(PADDING_SMALLEST)
+             .width(MENU_WIDTH),
+         )
+         .close_on_click(true);
 
         // let view_menu = Item::with_menu(
         //     text("视图(V)").size(FONT_SIZE_BIGGER),
@@ -100,7 +113,7 @@ impl MenuBar {
         //         .width(MENU_WIDTH),
         // );
 
-        AWMenuBar::new(vec![file_menu, ])
+        AWMenuBar::new(vec![file_menu, edit_menu])
             .width(Length::Shrink)
             .style(|theme: &Theme, _| {
                 let ex_palette = theme.extended_palette();

@@ -1,6 +1,10 @@
-use std::{ffi::OsStr, path::PathBuf};
-use crate::{constants::*, file_panel::FilePanelMessage};
-use iced::{mouse, widget::{column, container, mouse_area, text, Column, Row}, Background, Length, Padding, Theme};
+use crate::{common::*, file_panel::FilePanelMessage};
+use anyhow::{Ok, Result};
+use iced::{
+    Background, Length, Padding, Theme, mouse,
+    widget::{Column, Row, column, container, mouse_area, text},
+};
+use std::path::{Path, PathBuf};
 
 const EXTENSION_STR: [&str; 3] = ["md", "png", "jpg"];
 
@@ -14,13 +18,25 @@ pub async fn open_file_dialog() -> Option<PathBuf> {
     Some(path.path().to_path_buf())
 }
 
-pub async fn open_filder() -> Option<PathBuf> {
+pub async fn open_folder_dialog() -> Option<PathBuf> {
     let path = rfd::AsyncFileDialog::new()
         .set_title("打开文件夹")
         .pick_folder()
         .await?;
 
     Some(path.path().to_path_buf())
+}
+
+pub async fn read_file_content(path: PathBuf) -> anyhow::Result<FileData> {
+    let content = tokio::fs::read_to_string(&path).await?;
+    let name = path.file_name().unwrap().to_string_lossy().into_owned();
+    let file_data = FileData {
+        name,
+        content,
+        path,
+        is_saved: true,
+    };
+    Ok(file_data)
 }
 
 #[derive(Debug, Clone)]
@@ -87,45 +103,64 @@ pub async fn load_file_tree(path: PathBuf) -> anyhow::Result<FileTree> {
 }
 
 // 递归渲染节点树
-pub fn view_node(hovered_id: Option<usize>, file_tree: &FileTree, id: usize, depth: usize) -> Column<'_, FilePanelMessage> {
-        let node = &file_tree.nodes[id];
-        let row = mouse_area(
-            container(
-                Row::new()
-                    .padding(Padding::default().left(depth as u32 * 10))
-                    .push(
-                        text(node.node.file_name().unwrap().to_string_lossy())
-                            .size(FONT_SIZE_SMALLER)
-                            .wrapping(text::Wrapping::None),
-                    ),
-            )
-            .width(Length::Fill)
-            .style(move |theme: &Theme| {
-                let ex_palette = theme.extended_palette();
-                if hovered_id == Some(id) {
-                    container::Style {
-                        background: Some(Background::Color(ex_palette.background.weaker.color)),
-                        ..container::Style::default()
-                    }
-                } else {
-                    container::Style::default()
-                }
-            }),
-        )
-        .interaction(mouse::Interaction::Pointer)
-        .on_press(FilePanelMessage::Expanded(id))
-        .on_enter(FilePanelMessage::HoverEnter(id));
-
-        if !node.children.is_empty() {
-            let mut column = Column::new().height(match node.expanded {
-                false => 0.into(),
-                true => Length::Shrink,
-            });
-            for &child in &node.children {
-                column = column.push(view_node(hovered_id, file_tree, child, depth + 1));
-            }
-            column![row, column]
+pub fn view_node(
+    hovered_id: Option<usize>,
+    file_tree: &FileTree,
+    id: usize,
+    depth: u16,
+) -> Column<'_, FilePanelMessage> {
+    let node = &file_tree.nodes[id];
+    let mut row = Row::new();
+    
+    let children_node = if !node.children.is_empty() {
+        if node.expanded {
+            row = row.push(text("▼ ").size(FONT_SIZE_SMALLER));
         } else {
-            column![row]
+            row = row.push(text("▶ ").size(FONT_SIZE_SMALLER));
         }
+        let mut column = Column::new().height(match node.expanded {
+            false => 0.into(),
+            true => Length::Shrink,
+        });
+        for &child in &node.children {
+            column = column.push(view_node(hovered_id, file_tree, child, depth + 1));
+        }
+        Some(column)
+    } else {
+        if node.node.is_dir() {
+            row = row.push(text("▷ ").size(FONT_SIZE_SMALLER));
+        }
+        None
+    };
+    
+    let node = mouse_area(
+        container(
+            row.push(
+                text(node.node.file_name().unwrap().to_string_lossy())
+                    .size(FONT_SIZE_SMALLER)
+                    .wrapping(text::Wrapping::None),
+            )
+            .padding(Padding::from([PADDING_SMALLEST, depth * TEXT_INDENTATION])),
+        )
+        .width(Length::Fill)
+        .style(move |theme: &Theme| {
+            let ex_palette = theme.extended_palette();
+            if hovered_id == Some(id) {
+                container::Style {
+                    background: Some(Background::Color(ex_palette.background.weaker.color)),
+                    ..container::Style::default()
+                }
+            } else {
+                container::Style::default()
+            }
+        }),
+    )
+    .interaction(mouse::Interaction::Pointer)
+    .on_press(FilePanelMessage::SelectFileNode(id))
+    .on_enter(FilePanelMessage::HoverEnter(id));
+    
+    match children_node {
+        Some(children) => column![node, children],
+        None => column![node]
     }
+}
