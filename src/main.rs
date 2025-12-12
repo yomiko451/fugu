@@ -11,6 +11,7 @@ mod app;
 
 fn main() -> iced::Result {
     iced::application(App::new, App::update, App::view)
+        .subscription(App::subscription)
         .title(APP_NAME)
         .window_size(DEFAULT_WINDOW_SIZE)
         .theme(DEFAULT_THEME.clone())

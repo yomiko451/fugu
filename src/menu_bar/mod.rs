@@ -1,7 +1,7 @@
 use iced::{
     border::Radius, mouse, widget::{container, mouse_area, text, Container, MouseArea}, Background, Border, Color, Element, Length, Padding, Task, Theme
 };
-use iced_aw::{Menu, MenuBar as AWMenuBar, menu::Item};
+use iced_aw::{Menu, menu::Item};
 
 use crate::common::*;
 
@@ -95,11 +95,30 @@ impl MenuBar {
          )
          .close_on_click(true);
 
-        // let view_menu = Item::with_menu(
-        //     text("视图(V)").size(FONT_SIZE_BIGGER),
-        //     Menu::new([Item::new("open"), Item::new("save"), Item::new("close")].into())
-        //         .width(MENU_WIDTH),
-        // );
+        let view_menu = Item::with_menu(
+            mouse_area(text("视图(V)").size(FONT_SIZE_BASE))
+                .interaction(mouse::Interaction::Pointer),
+            Menu::new(
+                [
+                    ("同步滚动", MenuBarMessage::None),
+                    ("剪切", MenuBarMessage::None),
+                    ("复制", MenuBarMessage::None),
+                     ("粘贴", MenuBarMessage::None),
+                    ("删除", MenuBarMessage::None),
+                ]
+                .into_iter()
+                .enumerate()
+                .map(|(id, (menu_text, message))| {
+                    let item = self.generate_menu_item(menu_text.to_string(), id, message);
+                    Item::new(item)
+                })
+                .collect(),
+            )
+            .offset(MENU_OFFSET)
+            .padding(PADDING_SMALLEST)
+            .width(MENU_WIDTH),
+        )
+        .close_on_click(true);
 
         // let tool_menu = Item::with_menu(
         //     text("设置(S)").size(FONT_SIZE_BIGGER),
@@ -113,7 +132,7 @@ impl MenuBar {
         //         .width(MENU_WIDTH),
         // );
 
-        AWMenuBar::new(vec![file_menu, edit_menu])
+        iced_aw::MenuBar::new(vec![file_menu, edit_menu, view_menu])
             .width(Length::Shrink)
             .style(|theme: &Theme, _| {
                 let ex_palette = theme.extended_palette();

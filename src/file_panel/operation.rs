@@ -4,6 +4,7 @@ use iced::{
     Background, Length, Padding, Theme, mouse,
     widget::{Column, Row, column, container, mouse_area, text},
 };
+use tokio::io::AsyncWriteExt;
 use std::path::{Path, PathBuf};
 
 const EXTENSION_STR: [&str; 3] = ["md", "png", "jpg"];
@@ -27,7 +28,7 @@ pub async fn open_folder_dialog() -> Option<PathBuf> {
     Some(path.path().to_path_buf())
 }
 
-pub async fn read_file_content(path: PathBuf) -> anyhow::Result<FileData> {
+pub async fn read_file(path: PathBuf) -> anyhow::Result<FileData> {
     let content = tokio::fs::read_to_string(&path).await?;
     let name = path.file_name().unwrap().to_string_lossy().into_owned();
     let file_data = FileData {
@@ -37,6 +38,12 @@ pub async fn read_file_content(path: PathBuf) -> anyhow::Result<FileData> {
         is_saved: true,
     };
     Ok(file_data)
+}
+
+pub async fn save_file(file_data: FileData) -> anyhow::Result<()> {
+    let mut file = tokio::fs::File::create(&file_data.path).await?;
+    file.write_all(file_data.content.as_bytes()).await?;
+    Ok(())
 }
 
 #[derive(Debug, Clone)]

@@ -74,7 +74,7 @@ pub const TEXT_INDENTATION: u16 = 15;
 //pub const MENU_BAR_AND_STATUS_BAR_BG_COLOR: Color = Color::from_rgb8(59, 65, 77);
 
 pub const MENU_WIDTH: f32 = 150.;
-pub const MENU_OFFSET: f32 = 10.;
+pub const MENU_OFFSET: f32 = 5.;
 
 // 编辑区相关常量
 //pub const EDITOR_BG_COLOR: Color = Color::from_rgb8(40, 44, 51);

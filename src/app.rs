@@ -6,7 +6,8 @@ use crate::{
     status_bar::{StatusBar, StatusBarMessage},
 };
 use iced::{
-    widget::{canvas::path::lyon_path::geom::euclid::approxeq::ApproxEq, column, row}, Element, Length, Task
+    Element, Length, Subscription, Task,
+    widget::{canvas::path::lyon_path::geom::euclid::approxeq::ApproxEq, column, row},
 };
 use tracing::{error, info, warn};
 use tracing_appender::rolling;
@@ -44,7 +45,7 @@ impl App {
         //     .with_ansi(false)
         //     .with_writer(non_blocking)
         //     .init();
-        // 
+        //
 
         tracing_subscriber::fmt()
             .with_env_filter(EnvFilter::new("fugu=info"))
@@ -62,13 +63,18 @@ impl App {
     pub fn update(&mut self, app_message: AppMessage) -> Task<AppMessage> {
         match app_message {
             AppMessage::FilePanel(file_panel_message) => match file_panel_message {
-                FilePanelMessage::SendFileDataToEditor(file_data) => {
-                    self.editor.update(EditorMessage::GetFileDataFromFilePanel(file_data)).map(AppMessage::Editor)
-                }
+                FilePanelMessage::SendFileDataToEditor(file_data) => self
+                    .editor
+                    .update(EditorMessage::LoadFileDataFromFilePanel(file_data))
+                    .map(AppMessage::Editor),
+                FilePanelMessage::SendSaveSuccessToEditor => self
+                    .editor
+                    .update(EditorMessage::GetSaveSuccessFromFilePanel)
+                    .map(AppMessage::Editor),
                 _ => self
                     .file_panel
                     .update(file_panel_message)
-                    .map(AppMessage::FilePanel)
+                    .map(AppMessage::FilePanel),
             },
             AppMessage::MenuBar(menu_bar_message) => match menu_bar_message {
                 MenuBarMessage::CommandOpenFolder => self
@@ -84,20 +90,23 @@ impl App {
                     .update(menu_bar_message)
                     .map(AppMessage::MenuBar),
             },
-            AppMessage::Editor(editor_message) => {
-                match editor_message {
-                    EditorMessage::SendInputContentToPreview(input_content) => {
-                        self.preview.update(PreviewMessage::GetInputContentFromEditor(input_content))
-                            .map(AppMessage::Preview)
-                    }
-                    _ => self.editor.update(editor_message).map(AppMessage::Editor)
-                }
-            }
-            AppMessage::Preview(preview_message) => {
-                match preview_message {
-                    _ => self.preview.update(preview_message).map(AppMessage::Preview)
-                }
-            }
+            AppMessage::Editor(editor_message) => match editor_message {
+                EditorMessage::SendInputContentToPreview(input_content) => self
+                    .preview
+                    .update(PreviewMessage::GetInputContentFromEditor(input_content))
+                    .map(AppMessage::Preview),
+                EditorMessage::SendSaveRequestToSaveFileData(file_data) => self
+                    .file_panel
+                    .update(FilePanelMessage::SaveFileDataFromEditor(file_data))
+                    .map(AppMessage::FilePanel),
+                _ => self.editor.update(editor_message).map(AppMessage::Editor),
+            },
+            AppMessage::Preview(preview_message) => match preview_message {
+                _ => self
+                    .preview
+                    .update(preview_message)
+                    .map(AppMessage::Preview),
+            },
             _ => Task::none(),
         }
     }
@@ -149,6 +158,11 @@ impl App {
         .height(Length::Fill)
         .into()
     }
+
+    pub fn subscription(&self) -> Subscription<AppMessage> {
+        Subscription::batch([
+            self.editor.subscription().map(AppMessage::Editor),
+            self.status_bar.subscription().map(AppMessage::StatusBar),
+        ])
+    }
 }
-
-

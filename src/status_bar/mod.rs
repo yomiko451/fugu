@@ -1,4 +1,4 @@
-use iced::{widget::{container, text, Container}, Background, Color, Element, Task, Theme};
+use iced::{widget::{container, text, Container}, Background, Color, Element, Subscription, Task, Theme};
 
 use crate::common::*;
 
@@ -35,5 +35,9 @@ impl StatusBar {
                 ..container::Style::default()
             }
         })
+    }
+    
+    pub fn subscription(&self) -> Subscription<StatusBarMessage> {
+        Subscription::none()
     }
 }
