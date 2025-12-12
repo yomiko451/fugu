@@ -2,12 +2,11 @@ use crate::{
     editor::{Editor, EditorMessage},
     file_panel::{FilePanel, FilePanelMessage},
     menu_bar::{MenuBar, MenuBarMessage},
-    preview::{self, Preview, PreviewMessage},
-    status_bar::{StatusBar, StatusBarMessage},
+    preview::{Preview, PreviewMessage},
 };
 use iced::{
     Element, Length, Subscription, Task,
-    widget::{canvas::path::lyon_path::geom::euclid::approxeq::ApproxEq, column, row},
+    widget::{column, row},
 };
 use tracing::{error, info, warn};
 use tracing_appender::rolling;
@@ -19,7 +18,6 @@ pub struct App {
     preview: Preview,
     file_panel: FilePanel,
     menu_bar: MenuBar,
-    status_bar: StatusBar,
 }
 
 #[derive(Debug, Clone)]
@@ -29,7 +27,6 @@ pub enum AppMessage {
     Preview(PreviewMessage),
     FilePanel(FilePanelMessage),
     MenuBar(MenuBarMessage),
-    StatusBar(StatusBarMessage),
     // 顶层消息
     None,
 }
@@ -56,14 +53,13 @@ impl App {
             preview: Preview::new(),
             file_panel: FilePanel::new(),
             menu_bar: MenuBar::new(),
-            status_bar: StatusBar {},
         }
     }
 
     pub fn update(&mut self, app_message: AppMessage) -> Task<AppMessage> {
         match app_message {
             AppMessage::FilePanel(file_panel_message) => match file_panel_message {
-                FilePanelMessage::SendFileDataToEditor(file_data) => self
+                FilePanelMessage::SendSelectedFileDataToEditor(file_data) => self
                     .editor
                     .update(EditorMessage::LoadFileDataFromFilePanel(file_data))
                     .map(AppMessage::Editor),
@@ -136,23 +132,20 @@ impl App {
             .width(Length::FillPortion(5))
             .height(Length::Fill)
             .into();
-        let status_bar: Element<'_, StatusBarMessage> = self
-            .status_bar
-            .view()
-            .width(Length::Fill)
-            .height(Length::Shrink)
-            .into();
 
-        column![
-            menu_bar.map(AppMessage::MenuBar),
-            row![
-                file_panel.map(AppMessage::FilePanel),
-                editor.map(AppMessage::Editor),
-                preview.map(AppMessage::Preview),
+        row![
+            column![
+                menu_bar.map(AppMessage::MenuBar),
+                row![
+                    file_panel.map(AppMessage::FilePanel),
+                    editor.map(AppMessage::Editor),
+                ]
+                .height(Length::Fill)
+                .width(Length::Fill)
             ]
             .height(Length::Fill)
-            .width(Length::Fill),
-            status_bar.map(AppMessage::StatusBar)
+            .width(Length::FillPortion(7)),
+            preview.map(AppMessage::Preview),
         ]
         .width(Length::Fill)
         .height(Length::Fill)
@@ -160,9 +153,6 @@ impl App {
     }
 
     pub fn subscription(&self) -> Subscription<AppMessage> {
-        Subscription::batch([
-            self.editor.subscription().map(AppMessage::Editor),
-            self.status_bar.subscription().map(AppMessage::StatusBar),
-        ])
+        Subscription::batch([self.editor.subscription().map(AppMessage::Editor)])
     }
 }

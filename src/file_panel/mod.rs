@@ -3,7 +3,7 @@ use crate::{
     file_panel::operation::{FileTree, load_file_tree},
 };
 use iced::{
-    Background, Border, Element, Length, Task, Theme,
+    Background, Border, Element, Length, Padding, Task, Theme,
     alignment::Horizontal::Left,
     border::Radius,
     widget::{Column, Container, button, column, container, scrollable, space, text},
@@ -11,7 +11,7 @@ use iced::{
 use iced::{
     alignment::Horizontal,
     mouse,
-    widget::{center, mouse_area},
+    widget::{center, mouse_area, row},
 };
 use std::path::PathBuf;
 use tracing::{error, info, warn};
@@ -32,7 +32,7 @@ pub enum FilePanelMessage {
     HoverEnter(usize),
     OperationOpenFolder,
     OperationOpenFile,
-    SendFileDataToEditor(FileData),
+    SendSelectedFileDataToEditor(FileData),
     SendSaveSuccessToEditor,
     SaveFileDataFromEditor(FileData),
     LogError(String),
@@ -57,11 +57,10 @@ impl FilePanel {
             }
             FilePanelMessage::LoadFileContent(path) => {
                 if let Some(path) = path {
-                    info!("文件路径获取成功!");
                     Task::perform(operation::read_file(path), |file_data| match file_data {
                         Ok(file_data) => {
                             info!("文件数据读取成功!");
-                            FilePanelMessage::SendFileDataToEditor(file_data)
+                            FilePanelMessage::SendSelectedFileDataToEditor(file_data)
                         }
                         Err(error) => FilePanelMessage::LogError(error.to_string()),
                     })
@@ -79,8 +78,11 @@ impl FilePanel {
                     let node = &mut ft.nodes[id];
                     if node.node.is_dir() {
                         node.expanded = !node.expanded;
+                    } else {
+                        return Task::done(FilePanelMessage::LoadFileContent(Some(
+                            node.node.clone(),
+                        )));
                     }
-                    return Task::done(FilePanelMessage::LoadFileContent(Some(node.node.clone())));
                 };
                 Task::none()
             }
@@ -118,15 +120,35 @@ impl FilePanel {
     }
 
     pub fn view(&self) -> Container<'_, FilePanelMessage> {
-        container(self.view_file_tree())
-            .padding(PADDING_BASE)
+        container(column![
+            container(self.view_file_tree()).padding(PADDING_BASE)
+                .height(Length::Fill),
+            container(
+                row![
+                    text("恢复").size(FONT_SIZE_BASE),
+                    space::horizontal(),
+                    text("恢复").size(FONT_SIZE_BASE)
+                ]
+                .width(Length::Fill)
+                .spacing(SPACING)
+            )
+            .padding(Padding::from([PADDING_SMALLER, PADDING_BIGGER]))
+            .height(Length::Shrink)
             .style(|theme: &Theme| {
                 let ex_palette = theme.extended_palette();
                 container::Style {
-                    background: Some(Background::Color(ex_palette.background.weakest.color)),
+                    background: Some(Background::Color(ex_palette.background.weaker.color)),
                     ..container::Style::default()
                 }
             })
+        ])
+        .style(|theme: &Theme| {
+            let ex_palette = theme.extended_palette();
+            container::Style {
+                background: Some(Background::Color(ex_palette.background.weakest.color)),
+                ..container::Style::default()
+            }
+        })
     }
 
     // 递归渲染文件树

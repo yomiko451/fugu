@@ -5,8 +5,8 @@ mod editor;
 mod preview;
 mod file_panel;
 mod setting;
-mod status_bar;
 mod menu_bar;
+mod log;
 mod app;
 
 fn main() -> iced::Result {

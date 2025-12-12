@@ -1,5 +1,5 @@
 use std::{path::PathBuf, sync::LazyLock};
-use iced::{Color, Theme, theme::Palette};
+use iced::{theme::Palette, Color, Shadow, Theme, Vector};
 // 这里定义各种公共类型
 #[derive(Debug, Clone)]
 pub struct FileData {
@@ -31,6 +31,7 @@ pub const PADDING_BASE: u16 = 10;
 pub const PADDING_SMALLER: u16 = 5;
 pub const PADDING_SMALLEST: u16 = 2;
 // 默认间距
+pub const SPACING_BIGGER: u32 = 20;
 pub const SPACING: u32 = 10;
 //默认边框弧度
 pub const BORDER_RADIUS: f32 = 5.;
@@ -60,6 +61,16 @@ pub const DEFAULT_THEME: LazyLock<Theme> = LazyLock::new(||{
     };
     Theme::custom("FuguTheme", palette)
 });
+pub const SHADOW_BASE: Shadow = Shadow {
+    color: Color::from_rgba(0., 0., 0., 0.5),
+    blur_radius: 5.,
+    offset: Vector::new(0., 1.)
+};
+pub const SHADOW_BASE_0_OFFSET: Shadow = Shadow {
+    color: Color::from_rgba(0., 0., 0., 0.5),
+    blur_radius: 10.,
+    offset: Vector::ZERO
+};
 
 // 文件区相关常量
 pub const TEXT_INDENTATION: u16 = 15;

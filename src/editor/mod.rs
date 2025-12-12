@@ -1,20 +1,31 @@
 use crate::common::*;
 use iced::{
-    alignment::Horizontal, border::Radius, theme::palette, widget::{column, container, markdown::rule, row, rule, text, text_editor, Container}, Background, Border, Color, Length, Padding, Subscription, Task, Theme
+    alignment::Horizontal, border::Radius, mouse, theme::palette, widget::{
+        column, container, markdown::rule, mouse_area, row, rule, space, text, text_editor, text_input, Container, TextEditor
+    }, Background, Border, Color, Element, Length, Padding, Subscription, Task, Theme
 };
-use std::collections::VecDeque;
+use std::{collections::VecDeque, string};
 use tracing::info;
 
+mod clipboard;
 mod operation;
+mod snapshot;
 
 #[derive(Debug, Clone)]
 pub struct Editor {
     selected_file: Option<FileData>,
     last_edited_at: Option<iced::time::Instant>,
     editor_content: text_editor::Content,
+    snap_shot: Vec<SnapShot>
     //history: VecDeque<text_editor::Action>,
-    //undo_stack: Vec<text_editor::Action>,
-    //redo_stack: Vec<text_editor::Action>,
+                                         //undo_stack: Vec<text_editor::Action>,                               //redo_stack: Vec<text_editor::Action>,
+}
+
+#[derive(Debug, Clone)]
+struct SnapShot {
+    created_at: String,
+    name: String,
+    content: String
 }
 
 #[derive(Debug, Clone)]
@@ -22,6 +33,8 @@ pub enum EditorMessage {
     EditorAction(text_editor::Action),
     DebounceTick(iced::time::Instant),
     TimeToSaveFileData,
+    AddSnapShot(String),
+
     SendInputContentToPreview(String),
     SendSaveRequestToSaveFileData(FileData),
     LoadFileDataFromFilePanel(FileData),
@@ -35,9 +48,10 @@ impl Editor {
             //auto_save: bool, // 开了会不会出现手动和自动保存竞态?
             last_edited_at: None,
             editor_content: text_editor::Content::default(),
-            //history: VecDeque::with_capacity(100),
-            //undo_stack: vec![],
-            //redo_stack: vec![],
+            snap_shot: vec![]
+             //history: VecDeque::with_capacity(100),
+                              //undo_stack: vec![],
+                              //redo_stack: vec![],
         }
     }
 
@@ -74,7 +88,9 @@ impl Editor {
             EditorMessage::TimeToSaveFileData => {
                 if let Some(file_data) = &mut self.selected_file {
                     file_data.content = self.editor_content.text();
-                    return Task::done(EditorMessage::SendSaveRequestToSaveFileData(file_data.clone()));
+                    return Task::done(EditorMessage::SendSaveRequestToSaveFileData(
+                        file_data.clone(),
+                    ));
                 }
                 Task::none()
             }
@@ -91,6 +107,42 @@ impl Editor {
     }
 
     pub fn view(&self) -> Container<'_, EditorMessage> {
+        container(column![
+            self.generate_editor_component(),
+            container(
+                row![
+                    text("恢复").size(FONT_SIZE_BASE),
+                    space::horizontal(),
+                    text("恢复").size(FONT_SIZE_BASE)
+                ]
+                .width(Length::Fill)
+                .spacing(SPACING)
+            )
+            .padding(Padding::from([PADDING_SMALLER, PADDING_BIGGER]))
+            .height(Length::Shrink)
+            .style(|theme: &Theme| {
+                let ex_palette = theme.extended_palette();
+                container::Style {
+                    background: Some(Background::Color(ex_palette.background.weaker.color)),
+                    ..container::Style::default()
+                }
+            })
+        ])
+        .style(|theme: &Theme| {
+            let palette = theme.palette();
+            container::Style {
+                background: Some(Background::Color(palette.background)),
+                ..container::Style::default()
+            }
+        })
+    }
+
+    pub fn subscription(&self) -> Subscription<EditorMessage> {
+        iced::time::every(iced::time::Duration::from_secs(1))
+            .map(|_| EditorMessage::DebounceTick(iced::time::Instant::now()))
+    }
+
+    pub fn generate_editor_component(&self) -> Element<EditorMessage> {
         let name = if let Some(file_data) = &self.selected_file {
             if !file_data.is_saved {
                 format!("{} *", file_data.name)
@@ -100,8 +152,7 @@ impl Editor {
         } else {
             "".to_string()
         };
-
-        container(column![
+        column![
             row![text(name).width(Length::Fill).size(FONT_SIZE_BIGGER)]
                 .padding(Padding::from([PADDING_SMALLER, PADDING_BIGGER]))
                 .height(Length::Shrink),
@@ -128,17 +179,7 @@ impl Editor {
                         selection: palette.primary,
                     }
                 }),
-        ])
-        .style(|theme: &Theme| {
-            let palette = theme.palette();
-            container::Style {
-                background: Some(Background::Color(palette.background)),
-                ..container::Style::default()
-            }
-        })
-    }
-    
-    pub fn subscription(&self) -> Subscription<EditorMessage> {
-        iced::time::every(iced::time::Duration::from_secs(1)).map(|_|EditorMessage::DebounceTick(iced::time::Instant::now()))
+        ]
+        .into()
     }
 }

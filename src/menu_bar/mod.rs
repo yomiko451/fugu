@@ -1,5 +1,8 @@
 use iced::{
-    border::Radius, mouse, widget::{container, mouse_area, text, Container, MouseArea}, Background, Border, Color, Element, Length, Padding, Task, Theme
+    Background, Border, Color, Element, Length, Padding, Renderer, Task, Theme,
+    border::Radius,
+    mouse,
+    widget::{Container, MouseArea, container, mouse_area, text},
 };
 use iced_aw::{Menu, menu::Item};
 
@@ -15,7 +18,8 @@ pub enum MenuBarMessage {
     HoverEnter(usize),
     None,
     CommandOpenFolder,
-    CommandOpenFile
+    CommandOpenFile,
+    CommandCreateSnapShot,
 }
 
 impl MenuBar {
@@ -46,93 +50,69 @@ impl MenuBar {
     }
 
     pub fn create_menu_bar(&self) -> Element<'_, MenuBarMessage> {
-        let file_menu = Item::with_menu(
-            mouse_area(text("文件(T)").size(FONT_SIZE_BASE))
-                .interaction(mouse::Interaction::Pointer),
-            Menu::new(
-                [
-                    ("新建文件", MenuBarMessage::None),
-                    ("打开文件", MenuBarMessage::CommandOpenFile),
-                     ("打开文件夹", MenuBarMessage::CommandOpenFolder),
-                    ("文件另存为", MenuBarMessage::None),
-                ]
-                .into_iter()
-                .enumerate()
-                .map(|(id, (menu_text, message))| {
-                    let item = self.generate_menu_item(menu_text.to_string(), id, message);
-                    Item::new(item)
-                })
-                .collect(),
-            )
-            .offset(MENU_OFFSET)
-            .padding(PADDING_SMALLEST)
-            .width(MENU_WIDTH),
-        )
-        .close_on_click(true);
+        let file_menu = self.generate_menu(
+            "文件(F)",
+            vec![
+                ("新建文件", MenuBarMessage::None),
+                ("打开文件", MenuBarMessage::CommandOpenFile),
+                ("打开文件夹", MenuBarMessage::CommandOpenFolder),
+                ("文件另存为", MenuBarMessage::None),
+            ],
+        );
 
-         let edit_menu  = Item::with_menu(
-             mouse_area(text("编辑(E)").size(FONT_SIZE_BASE))
-                 .interaction(mouse::Interaction::Pointer),
-             Menu::new(
-                 [
-                     ("撤销", MenuBarMessage::None),
-                     ("剪切", MenuBarMessage::None),
-                     ("复制", MenuBarMessage::None),
-                      ("粘贴", MenuBarMessage::None),
-                     ("删除", MenuBarMessage::None),
-                 ]
-                 .into_iter()
-                 .enumerate()
-                 .map(|(id, (menu_text, message))| {
-                     let item = self.generate_menu_item(menu_text.to_string(), id, message);
-                     Item::new(item)
-                 })
-                 .collect(),
-             )
-             .offset(MENU_OFFSET)
-             .padding(PADDING_SMALLEST)
-             .width(MENU_WIDTH),
-         )
-         .close_on_click(true);
+        let edit_menu = self.generate_menu(
+            "编辑(E)",
+            vec![
+                ("撤销", MenuBarMessage::None),
+                ("重做", MenuBarMessage::None),
+                ("剪切", MenuBarMessage::None),
+                ("复制", MenuBarMessage::None),
+                ("粘贴", MenuBarMessage::None),
+                ("删除", MenuBarMessage::None),
+                ("全选", MenuBarMessage::None),
+            ],
+        );
 
-        let view_menu = Item::with_menu(
-            mouse_area(text("视图(V)").size(FONT_SIZE_BASE))
-                .interaction(mouse::Interaction::Pointer),
-            Menu::new(
-                [
-                    ("同步滚动", MenuBarMessage::None),
-                    ("剪切", MenuBarMessage::None),
-                    ("复制", MenuBarMessage::None),
-                     ("粘贴", MenuBarMessage::None),
-                    ("删除", MenuBarMessage::None),
-                ]
-                .into_iter()
-                .enumerate()
-                .map(|(id, (menu_text, message))| {
-                    let item = self.generate_menu_item(menu_text.to_string(), id, message);
-                    Item::new(item)
-                })
-                .collect(),
-            )
-            .offset(MENU_OFFSET)
-            .padding(PADDING_SMALLEST)
-            .width(MENU_WIDTH),
-        )
-        .close_on_click(true);
+        let snap_shot_menu = self.generate_menu(
+            "快照(S)",
+            vec![
+                ("创建快照", MenuBarMessage::None),
+                ("恢复快照", MenuBarMessage::None),
+                ("删除快照", MenuBarMessage::None),
+            ],
+        );
 
-        // let tool_menu = Item::with_menu(
-        //     text("设置(S)").size(FONT_SIZE_BIGGER),
-        //     Menu::new([Item::new("open"), Item::new("save"), Item::new("close")].into())
-        //         .width(MENU_WIDTH),
-        // );
+        let view_menu = self.generate_menu(
+            "视图(V)",
+            vec![
+                ("预览窗口", MenuBarMessage::None),
+                ("快照窗口", MenuBarMessage::None),
+                ("日志窗口", MenuBarMessage::None),
+                ("剪切板窗口", MenuBarMessage::None),
+            ],
+        );
 
-        // let help_menu = Item::with_menu(
-        //     text("帮助(H)").size(FONT_SIZE_BIGGER),
-        //     Menu::new([Item::new("open"), Item::new("save"), Item::new("close")].into())
-        //         .width(MENU_WIDTH),
-        // );
+        let tool_menu = self.generate_menu(
+            "工具(T)",
+            vec![
+                ("预览窗口", MenuBarMessage::None),
+                ("快照窗口", MenuBarMessage::None),
+                ("日志窗口", MenuBarMessage::None),
+                ("剪切板窗口", MenuBarMessage::None),
+            ],
+        );
 
-        iced_aw::MenuBar::new(vec![file_menu, edit_menu, view_menu])
+        let help_menu = self.generate_menu(
+            "帮助(H)",
+            vec![
+                ("预览窗口", MenuBarMessage::None),
+                ("快照窗口", MenuBarMessage::None),
+                ("日志窗口", MenuBarMessage::None),
+                ("剪切板窗口", MenuBarMessage::None),
+            ],
+        );
+
+        iced_aw::MenuBar::new(vec![file_menu, edit_menu, view_menu, snap_shot_menu, tool_menu, help_menu])
             .width(Length::Shrink)
             .style(|theme: &Theme, _| {
                 let ex_palette = theme.extended_palette();
@@ -142,7 +122,7 @@ impl MenuBar {
                     ..iced_aw::menu::Style::default()
                 }
             })
-            .spacing(SPACING)
+            .spacing(SPACING_BIGGER)
             .close_on_item_click_global(true)
             .close_on_background_click_global(true)
             .into()
@@ -175,12 +155,36 @@ impl MenuBar {
                     style.border(Border {
                         color: ex_palette.background.weakest.color,
                         width: BORDER_WIDTH,
-                        radius: Radius::new(BORDER_RADIUS)
+                        radius: Radius::new(BORDER_RADIUS),
                     })
                 }),
         )
         .on_enter(MenuBarMessage::HoverEnter(id))
         .interaction(mouse::Interaction::Pointer)
         .on_press(message)
+    }
+
+    pub fn generate_menu(
+        &self,
+        label: &'static str,
+        sub_item: Vec<(&'static str, MenuBarMessage)>,
+    ) -> Item<'_, MenuBarMessage, Theme, Renderer> {
+        Item::with_menu(
+            mouse_area(text(label).size(FONT_SIZE_BIGGER)).interaction(mouse::Interaction::Pointer),
+            Menu::new(
+                sub_item
+                    .into_iter()
+                    .enumerate()
+                    .map(|(id, (menu_text, message))| {
+                        let item = self.generate_menu_item(menu_text.to_string(), id, message);
+                        Item::new(item)
+                    })
+                    .collect(),
+            )
+            .offset(MENU_OFFSET)
+            .padding(PADDING_SMALLEST)
+            .width(MENU_WIDTH),
+        )
+        .close_on_click(true)
     }
 }
