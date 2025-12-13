@@ -1,4 +1,4 @@
-use std::fmt::write;
+use std::{fmt::write, sync::Arc};
 
 use iced::{
     alignment::{Horizontal, Vertical::Bottom}, border::Radius, mouse, overlay::menu, widget::{
@@ -14,7 +14,7 @@ mod viewer;
 #[derive(Debug, Clone)]
 pub struct Preview {
     current_page: PreviewPage,
-    content: Option<String>,
+    content: Option<Arc<String>>,
     marddown: Vec<markdown::Item>,
     snap_shot_index_state: Vec<String>,
     current_snap_shot_index: Option<String>,
@@ -23,7 +23,7 @@ pub struct Preview {
 
 #[derive(Debug, Clone)]
 pub enum PreviewMessage {
-    GetInputContentFromEditor(String),
+    SyncContnetWithEditor(Arc<String>),
     RenderMarkdowm,
     EditorAction(text_editor::Action),
     ChangePageTo(PreviewPage),
@@ -57,7 +57,7 @@ impl Preview {
 
     pub fn update(&mut self, preview_message: PreviewMessage) -> Task<PreviewMessage> {
         match preview_message {
-            PreviewMessage::GetInputContentFromEditor(content) => {
+            PreviewMessage::SyncContnetWithEditor(content) => {
                 self.content = Some(content);
                 Task::done(PreviewMessage::RenderMarkdowm)
             }

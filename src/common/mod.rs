@@ -1,12 +1,10 @@
-use std::{path::PathBuf, sync::LazyLock};
+use std::{path::PathBuf, sync::{Arc, LazyLock}};
 use iced::{theme::Palette, Color, Shadow, Theme, Vector};
 // 这里定义各种公共类型
 #[derive(Debug, Clone)]
 pub struct FileData {
     pub name: String,
-    pub content: String,
-    pub path: PathBuf,
-    pub is_saved: bool,
+    pub content: Arc<String>,
 }
 
 
@@ -42,7 +40,7 @@ const BACKGROUND_COLOR: Color = Color::from_rgb8(40, 44, 51);
 // 默认文本色
 const TEXT_COLOR: Color = Color::from_rgb8(171, 178, 191);
 // 默认主色
-const PRIMARY_COLOR: Color = Color::from_rgb8(56, 178, 172);
+const PRIMARY_COLOR: Color = Color::from_rgb8(152, 195, 121);
 // 默认成功状态色
 const SUCCESS_COLOR: Color = Color::from_rgb(0.52, 0.63, 0.50);
 // 默认警告状态色

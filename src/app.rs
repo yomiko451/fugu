@@ -87,9 +87,9 @@ impl App {
                     .map(AppMessage::MenuBar),
             },
             AppMessage::Editor(editor_message) => match editor_message {
-                EditorMessage::SendInputContentToPreview(input_content) => self
+                EditorMessage::SendNewContentToPreview(new_content) => self
                     .preview
-                    .update(PreviewMessage::GetInputContentFromEditor(input_content))
+                    .update(PreviewMessage::SyncContnetWithEditor(new_content))
                     .map(AppMessage::Preview),
                 EditorMessage::SendSaveRequestToSaveFileData(file_data) => self
                     .file_panel

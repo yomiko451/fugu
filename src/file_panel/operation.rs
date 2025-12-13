@@ -1,13 +1,28 @@
 use crate::{common::*, file_panel::FilePanelMessage};
-use anyhow::{Ok, Result};
+use anyhow::{Ok, anyhow};
 use iced::{
-    Background, Length, Padding, Theme, mouse,
-    widget::{Column, Row, column, container, mouse_area, text},
+    mouse, widget::{column, container, mouse_area, text, Column, Row}, Background, Color, Length, Padding, Theme
 };
 use tokio::io::AsyncWriteExt;
-use std::path::{Path, PathBuf};
+use std::{collections::HashMap, path::{Path, PathBuf}, sync::{atomic::{AtomicU32, Ordering}, Arc}};
 
+static FILE_NODE_COUNTER: AtomicU32 = AtomicU32::new(0);
 const EXTENSION_STR: [&str; 3] = ["md", "png", "jpg"];
+
+pub fn get_next_id() -> u32 {
+    FILE_NODE_COUNTER.fetch_add(1, Ordering::Relaxed)
+}
+
+#[derive(Debug, Clone)]
+pub struct FileNode {
+    pub id: u32,
+    pub is_dir: bool,
+    pub expanded: bool,
+    pub file_name: String,
+    pub path: Option<PathBuf>,
+    pub content_cache: Option<Arc<String>>,
+    pub children: Vec<u32>,
+}
 
 pub async fn open_file_dialog() -> Option<PathBuf> {
     let path = rfd::AsyncFileDialog::new()
@@ -33,44 +48,39 @@ pub async fn read_file(path: PathBuf) -> anyhow::Result<FileData> {
     let name = path.file_name().unwrap().to_string_lossy().into_owned();
     let file_data = FileData {
         name,
-        content,
-        path,
-        is_saved: true,
+        content: Arc::new(content),
     };
     Ok(file_data)
 }
 
-pub async fn save_file(file_data: FileData) -> anyhow::Result<()> {
-    let mut file = tokio::fs::File::create(&file_data.path).await?;
+pub async fn save_file(path: PathBuf, file_data: FileData) -> anyhow::Result<()> {
+    let mut file = tokio::fs::File::create(path).await?;
     file.write_all(file_data.content.as_bytes()).await?;
     Ok(())
 }
 
-#[derive(Debug, Clone)]
-pub struct FileNode {
-    pub expanded: bool,
-    pub node: PathBuf,
-    pub children: Vec<usize>,
-}
-#[derive(Debug, Clone)]
-pub struct FileTree {
-    pub nodes: Vec<FileNode>,
-}
+
+// #[derive(Debug, Clone)]
+// pub struct FileTree(pub Vec<FileNode>);
 
 // 异步读取文件并生成节点树
-pub async fn load_file_tree(path: PathBuf) -> anyhow::Result<FileTree> {
-    let mut file_tree = FileTree { nodes: vec![] };
-
+pub async fn load_file_tree(path: PathBuf) -> anyhow::Result<(u32, HashMap<u32, FileNode>)> {
+    let mut file_tree = HashMap::new();
+    let root_file_node_key = get_next_id();
     let root_node = FileNode {
+        is_dir: path.is_dir(),
+        id: root_file_node_key,
         expanded: true,
-        node: path.to_path_buf(),
+        path: Some(path.to_path_buf()),
+        file_name: path.file_name().unwrap_or_default().to_string_lossy().into_owned(),
         children: vec![],
+        content_cache: None
     };
 
-    let mut node_index_stack = vec![(root_node.node.clone(), 0)];
-    file_tree.nodes.push(root_node);
+    let mut node_index_stack = vec![(root_node.path.as_ref().unwrap().clone(), root_node.id)];
+    file_tree.insert(root_node.id, root_node);
 
-    while let Some((path, index)) = node_index_stack.pop() {
+    while let Some((path, key)) = node_index_stack.pop() {
         let mut dir = tokio::fs::read_dir(path).await?;
 
         while let Some(entry) = dir.next_entry().await? {
@@ -79,71 +89,82 @@ pub async fn load_file_tree(path: PathBuf) -> anyhow::Result<FileTree> {
                 if let Some(extension) = path.extension()
                     && EXTENSION_STR.contains(&extension.to_string_lossy().as_ref())
                 {
-                    let sub_file_node = FileNode {
+                    let child_file_node = FileNode {
+                        is_dir: path.is_dir(),
+                        id: get_next_id(),
                         expanded: false,
-                        node: path.clone(),
+                        path: Some(path.clone()),
+                        file_name: path.file_name().unwrap_or_default().to_string_lossy().into_owned(),
                         children: vec![],
+                        content_cache: None
                     };
 
-                    let child_index = file_tree.nodes.len();
-                    file_tree.nodes.push(sub_file_node);
-                    file_tree.nodes[index].children.push(child_index);
+                    if let Some(file_node) = file_tree.get_mut(&key) {
+                        file_node.children.push(child_file_node.id);
+                    }
+                    file_tree.insert(child_file_node.id, child_file_node);
                 } else {
                     continue;
                 }
             } else {
-                let sub_file_node = FileNode {
+                let child_file_node = FileNode {
+                    is_dir: path.is_dir(),
+                    id: get_next_id(),
                     expanded: false,
-                    node: path.clone(),
+                    path: Some(path.clone()),
+                    file_name: path.file_name().unwrap_or_default().to_string_lossy().into_owned(),
                     children: vec![],
+                    content_cache: None
                 };
-
-                let child_index = file_tree.nodes.len();
-                file_tree.nodes.push(sub_file_node);
-                file_tree.nodes[index].children.push(child_index);
-                node_index_stack.push((path, child_index));
+                node_index_stack.push((path, child_file_node.id));
+                if let Some(file_node) = file_tree.get_mut(&key) {
+                    file_node.children.push(child_file_node.id);
+                }
+                file_tree.insert(child_file_node.id, child_file_node);
+                
             }
         }
     }
 
-    anyhow::Ok(file_tree)
+    anyhow::Ok((root_file_node_key, file_tree))
 }
 
 // 递归渲染节点树
 pub fn view_node(
-    hovered_id: Option<usize>,
-    file_tree: &FileTree,
-    id: usize,
+    hovered_id: Option<u32>,
+    selected_id: Option<u32>,
+    all_file_nodes: &HashMap<u32, FileNode>,
+    key: u32,
     depth: u16,
 ) -> Column<'_, FilePanelMessage> {
-    let node = &file_tree.nodes[id];
+    let node = all_file_nodes.get(&key).unwrap();
     let mut row = Row::new();
     
-    let children_node = if !node.children.is_empty() {
+    let children_node_view = if !node.children.is_empty() {
         if node.expanded {
-            row = row.push(text("▼ ").size(FONT_SIZE_SMALLER));
+            row = row.push(text(" ▼ ").size(FONT_SIZE_SMALLER));
         } else {
-            row = row.push(text("▶ ").size(FONT_SIZE_SMALLER));
+            row = row.push(text(" ▶ ").size(FONT_SIZE_SMALLER));
         }
         let mut column = Column::new().height(match node.expanded {
             false => 0.into(),
             true => Length::Shrink,
         });
-        for &child in &node.children {
-            column = column.push(view_node(hovered_id, file_tree, child, depth + 1));
+        for child_key in &node.children {
+            column = column.push(view_node(hovered_id, selected_id, all_file_nodes, *child_key, depth + 1));
         }
         Some(column)
     } else {
-        if node.node.is_dir() {
-            row = row.push(text("▷ ").size(FONT_SIZE_SMALLER));
+        if node.is_dir {
+            row = row.push(text(" ▷ ").size(FONT_SIZE_SMALLER));
         }
         None
     };
     
-    let node = mouse_area(
+    let node_view = mouse_area(
         container(
             row.push(
-                text(node.node.file_name().unwrap().to_string_lossy())
+                text(&node.file_name)
                     .size(FONT_SIZE_SMALLER)
                     .wrapping(text::Wrapping::None),
             )
@@ -152,22 +173,28 @@ pub fn view_node(
         .width(Length::Fill)
         .style(move |theme: &Theme| {
             let ex_palette = theme.extended_palette();
-            if hovered_id == Some(id) {
-                container::Style {
-                    background: Some(Background::Color(ex_palette.background.weaker.color)),
-                    ..container::Style::default()
-                }
+            let bg = if selected_id == Some(node.id) {
+                ex_palette.background.strong.color.scale_alpha(0.75)
+            }
+            else if hovered_id == Some(node.id) {
+                ex_palette.background.weaker.color
             } else {
-                container::Style::default()
+                Color::TRANSPARENT
+            };
+            container::Style {
+                background: Some(Background::Color(bg)),
+                ..container::Style::default()
             }
         }),
     )
     .interaction(mouse::Interaction::Pointer)
-    .on_press(FilePanelMessage::SelectFileNode(id))
-    .on_enter(FilePanelMessage::HoverEnter(id));
+    .on_press(FilePanelMessage::ChangeSelectedFileNode(node.id))
+    .on_enter(FilePanelMessage::ChangeHoveredFileNode(node.id));
     
-    match children_node {
-        Some(children) => column![node, children],
-        None => column![node]
+    match children_node_view {
+        Some(children) => column![node_view, children],
+        None => column![node_view]
     }
 }
+
+

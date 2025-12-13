@@ -1,10 +1,11 @@
+use std::sync::Arc;
+
 use crate::common::*;
 use iced::{
-    alignment::Horizontal, border::Radius, mouse, theme::palette, widget::{
-        column, container, markdown::rule, mouse_area, row, rule, space, text, text_editor, text_input, Container, TextEditor
-    }, Background, Border, Color, Element, Length, Padding, Subscription, Task, Theme
+    Background, Border, Color, Element, Length, Padding, Subscription, Task, Theme,
+    border::Radius,
+    widget::{Container, column, container, row, rule, space, text, text_editor},
 };
-use std::{collections::VecDeque, string};
 use tracing::info;
 
 mod clipboard;
@@ -14,28 +15,27 @@ mod snapshot;
 #[derive(Debug, Clone)]
 pub struct Editor {
     selected_file: Option<FileData>,
+    is_content_changed: bool,
     last_edited_at: Option<iced::time::Instant>,
     editor_content: text_editor::Content,
-    snap_shot: Vec<SnapShot>
-    //history: VecDeque<text_editor::Action>,
-                                         //undo_stack: Vec<text_editor::Action>,                               //redo_stack: Vec<text_editor::Action>,
+    snap_shot: Vec<SnapShot>, //history: VecDeque<text_editor::Action>,
+                              //undo_stack: Vec<text_editor::Action>,                               //redo_stack: Vec<text_editor::Action>,
 }
 
 #[derive(Debug, Clone)]
 struct SnapShot {
     created_at: String,
     name: String,
-    content: String
+    content: String,
 }
 
 #[derive(Debug, Clone)]
 pub enum EditorMessage {
     EditorAction(text_editor::Action),
     DebounceTick(iced::time::Instant),
-    TimeToSaveFileData,
     AddSnapShot(String),
 
-    SendInputContentToPreview(String),
+    SendNewContentToPreview(Arc<String>),
     SendSaveRequestToSaveFileData(FileData),
     LoadFileDataFromFilePanel(FileData),
     GetSaveSuccessFromFilePanel,
@@ -48,10 +48,11 @@ impl Editor {
             //auto_save: bool, // 开了会不会出现手动和自动保存竞态?
             last_edited_at: None,
             editor_content: text_editor::Content::default(),
-            snap_shot: vec![]
-             //history: VecDeque::with_capacity(100),
-                              //undo_stack: vec![],
-                              //redo_stack: vec![],
+            snap_shot: vec![],
+            is_content_changed: false,
+            //history: VecDeque::with_capacity(100),
+            //undo_stack: vec![],
+            //redo_stack: vec![],
         }
     }
 
@@ -62,12 +63,13 @@ impl Editor {
                 let is_edit = action.is_edit();
                 self.editor_content.perform(action);
                 if is_edit {
-                    if let Some(file_data) = &mut self.selected_file {
-                        file_data.is_saved = false;
-                    }
-                    let input = self.editor_content.text();
+                    self.is_content_changed = true;
+                    let new_input = Arc::new(self.editor_content.text());
                     self.last_edited_at = Some(iced::time::Instant::now());
-                    return Task::done(EditorMessage::SendInputContentToPreview(input));
+                    if let Some(file_node) = &mut self.selected_file {
+                        file_node.content = Arc::clone(&new_input);
+                    }
+                    return Task::done(EditorMessage::SendNewContentToPreview(new_input));
                 }
                 Task::none()
             }
@@ -75,31 +77,26 @@ impl Editor {
                 self.selected_file = Some(file_data.clone());
                 self.editor_content = text_editor::Content::with_text(&file_data.content);
                 info!("文件内容载入成功!");
-                Task::done(EditorMessage::SendInputContentToPreview(file_data.content))
+                Task::done(EditorMessage::SendNewContentToPreview(Arc::clone(
+                    &file_data.content,
+                )))
             }
             EditorMessage::DebounceTick(instant) => {
                 if let Some(last_edited_at) = self.last_edited_at {
                     if instant.duration_since(last_edited_at) > iced::time::Duration::from_secs(2) {
-                        return Task::done(EditorMessage::TimeToSaveFileData);
+                        if let Some(ref file_data) = self.selected_file {
+                            return Task::done(EditorMessage::SendSaveRequestToSaveFileData(
+                                file_data.clone(),
+                            ));
+                        }
                     }
                 }
                 Task::none()
             }
-            EditorMessage::TimeToSaveFileData => {
-                if let Some(file_data) = &mut self.selected_file {
-                    file_data.content = self.editor_content.text();
-                    return Task::done(EditorMessage::SendSaveRequestToSaveFileData(
-                        file_data.clone(),
-                    ));
-                }
-                Task::none()
-            }
             EditorMessage::GetSaveSuccessFromFilePanel => {
-                if let Some(file_data) = &mut self.selected_file {
-                    info!("文件保存成功!");
-                    self.last_edited_at = None;
-                    file_data.is_saved = true;
-                }
+                info!("文件保存成功!");
+                self.last_edited_at = None;
+                self.is_content_changed = false;
                 Task::none()
             }
             _ => Task::none(),
@@ -111,12 +108,13 @@ impl Editor {
             self.generate_editor_component(),
             container(
                 row![
-                    text("恢复").size(FONT_SIZE_BASE),
+                    text!("行数  {}", self.editor_content.line_count()).size(FONT_SIZE_BASE),
+                    text!("字符数  {}", self.editor_content.text().chars().count())
+                        .size(FONT_SIZE_BASE),
                     space::horizontal(),
-                    text("恢复").size(FONT_SIZE_BASE)
                 ]
                 .width(Length::Fill)
-                .spacing(SPACING)
+                .spacing(SPACING_BIGGER)
             )
             .padding(Padding::from([PADDING_SMALLER, PADDING_BIGGER]))
             .height(Length::Shrink)
@@ -142,9 +140,9 @@ impl Editor {
             .map(|_| EditorMessage::DebounceTick(iced::time::Instant::now()))
     }
 
-    pub fn generate_editor_component(&self) -> Element<EditorMessage> {
+    pub fn generate_editor_component(&self) -> Element<'_, EditorMessage> {
         let name = if let Some(file_data) = &self.selected_file {
-            if !file_data.is_saved {
+            if self.is_content_changed {
                 format!("{} *", file_data.name)
             } else {
                 file_data.name.clone()

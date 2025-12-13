@@ -1,6 +1,6 @@
 
 剪切板，快照，日志，双栏编辑
-
+打包noto-cjk jb-mono字体
 
 rfd里有messagebox，看看干什么的
 
@@ -12,3 +12,6 @@ LoadFileTree不要用tree.unwrap，改改类型
 行号
 点击重命名
 同步滚动
+
+读取文件树添加防止爆栈逻辑
+
