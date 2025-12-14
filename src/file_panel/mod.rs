@@ -1,11 +1,14 @@
 use crate::{
     common::*,
-    file_panel::operation::{FileNode, load_file_tree},
+    file_panel::operation::{FileNode, get_next_id, load_file_tree},
 };
-use iced::widget::{center, row};
 use iced::{
     Background, Element, Length, Padding, Task, Theme,
     widget::{Column, Container, column, container, scrollable, space, text},
+};
+use iced::{
+    Length::Fill,
+    widget::{center, row},
 };
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tracing::{error, info, warn};
@@ -28,10 +31,15 @@ pub enum FilePanelMessage {
     ChangeHoveredFileNode(u32),
     OperationOpenFolder,
     OperationOpenFile,
+    OperationCreateNewFile,
+    OperationSaveFileData,
     SendSelectedFileDataToEditor(FileData),
     SendSaveSuccessToEditor,
-    SaveFileDataFromEditor(FileData),
+    AutoSaveFileDataFromEditor(FileData),
+    RenameFileNodeFromEditor(String),
+    UpdateSelectedFileNodeCache(FileData),
     LogError(String),
+    None,
 }
 
 impl FilePanel {
@@ -55,12 +63,67 @@ impl FilePanel {
             selected_file_node_id: None,
             hovered_file_node_id: None,
         };
-
         file_panel
     }
 
     pub fn update(&mut self, file_panel_message: FilePanelMessage) -> Task<FilePanelMessage> {
         match file_panel_message {
+            FilePanelMessage::OperationCreateNewFile => {
+                let new_file_id = operation::get_next_id();
+                let new_file = FileNode {
+                    id: new_file_id,
+                    is_dir: false,
+                    children: vec![],
+                    content_cache: None,
+                    path: None,
+                    expanded: false,
+                    file_name: "新建文件.md".to_string(),
+                };
+                self.all_file_nodes.insert(new_file_id, new_file);
+                let temp_workplace_root_node = self
+                    .all_file_nodes
+                    .get_mut(&self.temp_workplace_root_key)
+                    .expect("初始化必定插入此键值对不应当出错!");
+                temp_workplace_root_node.children.push(new_file_id);
+                Task::done(FilePanelMessage::ChangeSelectedFileNode(new_file_id))
+            }
+            FilePanelMessage::OperationSaveFileData => {
+                self.selected_file_node_id.and_then(|key| {
+                    self.all_file_nodes.get(&key).map(|selected_file_node| {
+                        if let (Some(path), Some(content)) =
+                            (&selected_file_node.path, &selected_file_node.content_cache)
+                        {
+                            Task::future(operation::save_file(path.clone(), Arc::clone(content)))
+                                .then(|result| match result {
+                                    Ok(_) => Task::done(FilePanelMessage::SendSaveSuccessToEditor),
+                                    Err(error) => {
+                                        Task::done(FilePanelMessage::LogError(error.to_string()))
+                                    }
+                                })
+                        } else {
+                            Task::done(FilePanelMessage::LogError("手动保存文件出错!".to_string()))
+                        }
+                    })
+                });
+                Task::none()
+            }
+            FilePanelMessage::RenameFileNodeFromEditor(new_name) => {
+                self.selected_file_node_id.and_then(|key| {
+                    self.all_file_nodes
+                        .get_mut(&key)
+                        .and_then(|selected_file_node| {
+                            selected_file_node.file_name = new_name.clone();
+                            selected_file_node.path.as_mut().map(|path| {
+                                *path = path
+                                    .parent()
+                                    .expect("父路径必定存在不应该出错!")
+                                    .join(new_name);
+                                Task::done(FilePanelMessage::OperationSaveFileData)
+                            })
+                        })
+                });
+                Task::none()
+            }
             FilePanelMessage::LoadWorkplace((root_file_node_key, all_files_tree)) => {
                 self.workplace_root_key = Some(root_file_node_key);
                 self.all_file_nodes.extend(all_files_tree);
@@ -91,7 +154,9 @@ impl FilePanel {
                             name: node.file_name.clone(),
                             content: Arc::clone(cache),
                         };
-                        return Task::done(FilePanelMessage::SaveFileDataFromEditor(file_data));
+                        return Task::done(FilePanelMessage::SendSelectedFileDataToEditor(
+                            file_data,
+                        ));
                     } else {
                         if let Some(ref path) = node.path {
                             return Task::perform(
@@ -99,23 +164,31 @@ impl FilePanel {
                                 |file_data| match file_data {
                                     Ok(file_data) => {
                                         info!("文件数据读取成功!");
-                                        FilePanelMessage::SendSelectedFileDataToEditor(file_data)
+                                        FilePanelMessage::UpdateSelectedFileNodeCache(file_data)
                                     }
                                     Err(error) => FilePanelMessage::LogError(error.to_string()),
                                 },
                             );
                         } else {
                             let file_data = FileData {
-                                name: "新建文件.md".to_string(),
-                                content: Arc::new("".to_string()),
+                                name: node.file_name.clone(),
+                                content: Arc::new(String::default()),
                             };
-                            return Task::done(FilePanelMessage::SendSelectedFileDataToEditor(
+                            return Task::done(FilePanelMessage::UpdateSelectedFileNodeCache(
                                 file_data,
                             ));
                         }
                     }
                 }
                 Task::none()
+            }
+            FilePanelMessage::UpdateSelectedFileNodeCache(file_data) => {
+                if let Some(key) = self.selected_file_node_id {
+                    if let Some(selected_file_data) = self.all_file_nodes.get_mut(&key) {
+                        selected_file_data.content_cache = Some(Arc::clone(&file_data.content));
+                    }
+                }
+                Task::done(FilePanelMessage::SendSelectedFileDataToEditor(file_data))
             }
             FilePanelMessage::OperationOpenFolder => Task::future(operation::open_folder_dialog())
                 .then(|path| {
@@ -161,25 +234,25 @@ impl FilePanel {
                         Task::none()
                     }
                 }),
-            FilePanelMessage::SaveFileDataFromEditor(file_data) => {
+            FilePanelMessage::AutoSaveFileDataFromEditor(file_data) => {
                 if let Some(key) = self.selected_file_node_id {
-                    let path = self
-                        .all_file_nodes
-                        .get(&key)
-                        .as_ref()
-                        .unwrap()
-                        .path
-                        .as_ref()
-                        .unwrap();
-                    return Task::perform(
-                        operation::save_file(path.clone(), file_data),
-                        |result| match result {
-                            Ok(_) => FilePanelMessage::SendSaveSuccessToEditor,
-                            Err(error) => FilePanelMessage::LogError(error.to_string()),
-                        },
-                    );
+                    if let Some(selected_file_data) = self.all_file_nodes.get_mut(&key) {
+                        selected_file_data.content_cache = Some(Arc::clone(&file_data.content));
+                        if let Some(path) = selected_file_data.path.as_ref() {
+                            return Task::perform(
+                                operation::save_file(path.clone(), file_data.content),
+                                |result| match result {
+                                    Ok(_) => FilePanelMessage::SendSaveSuccessToEditor,
+                                    Err(error) => FilePanelMessage::LogError(error.to_string()),
+                                },
+                            );
+                        } else {
+                            info!("文件保存缓冲区成功!");
+                            return Task::done(FilePanelMessage::SendSaveSuccessToEditor);
+                        }
+                    };
                 }
-                Task::none()
+                Task::done(FilePanelMessage::LogError("文件保存失败!".to_string()))
             }
             FilePanelMessage::LogError(error_info) => {
                 error!(error_info);
@@ -228,7 +301,7 @@ impl FilePanel {
         let temp_wordplace_root_node = self
             .all_file_nodes
             .get(&self.temp_workplace_root_key)
-            .unwrap();
+            .expect("初始化必定插入此键值对不应当出错!");
         if !temp_wordplace_root_node.children.is_empty() {
             workplace_view = workplace_view
                 .push(scrollable(operation::view_node(

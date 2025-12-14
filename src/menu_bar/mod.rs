@@ -19,7 +19,8 @@ pub enum MenuBarMessage {
     None,
     CommandOpenFolder,
     CommandOpenFile,
-    CommandCreateSnapShot,
+    CommandCreateNewFile,
+    CommandSaveFile,
 }
 
 impl MenuBar {
@@ -53,8 +54,9 @@ impl MenuBar {
         let file_menu = self.generate_menu(
             "文件(F)",
             vec![
-                ("新建文件", MenuBarMessage::None),
+                ("新建文件", MenuBarMessage::CommandCreateNewFile),
                 ("打开文件", MenuBarMessage::CommandOpenFile),
+                ("保存文件", MenuBarMessage::CommandSaveFile),
                 ("打开文件夹", MenuBarMessage::CommandOpenFolder),
                 ("文件另存为", MenuBarMessage::None),
             ],
@@ -73,15 +75,6 @@ impl MenuBar {
             ],
         );
 
-        let snap_shot_menu = self.generate_menu(
-            "快照(S)",
-            vec![
-                ("创建快照", MenuBarMessage::None),
-                ("恢复快照", MenuBarMessage::None),
-                ("删除快照", MenuBarMessage::None),
-            ],
-        );
-
         let view_menu = self.generate_menu(
             "视图(V)",
             vec![
@@ -91,9 +84,18 @@ impl MenuBar {
                 ("剪切板窗口", MenuBarMessage::None),
             ],
         );
-
+        
         let tool_menu = self.generate_menu(
             "工具(T)",
+            vec![
+                ("创建快照", MenuBarMessage::None),
+                ("恢复快照", MenuBarMessage::None),
+                ("删除快照", MenuBarMessage::None),
+            ],
+        );
+
+        let setting_menu = self.generate_menu(
+            "设置(S)",
             vec![
                 ("预览窗口", MenuBarMessage::None),
                 ("快照窗口", MenuBarMessage::None),
@@ -112,7 +114,7 @@ impl MenuBar {
             ],
         );
 
-        iced_aw::MenuBar::new(vec![file_menu, edit_menu, view_menu, snap_shot_menu, tool_menu, help_menu])
+        iced_aw::MenuBar::new(vec![file_menu, edit_menu, view_menu, tool_menu, setting_menu, help_menu])
             .width(Length::Shrink)
             .style(|theme: &Theme, _| {
                 let ex_palette = theme.extended_palette();

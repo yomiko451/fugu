@@ -81,6 +81,14 @@ impl App {
                     .file_panel
                     .update(FilePanelMessage::OperationOpenFile)
                     .map(AppMessage::FilePanel),
+                MenuBarMessage::CommandCreateNewFile => self
+                    .file_panel
+                    .update(FilePanelMessage::OperationCreateNewFile)
+                    .map(AppMessage::FilePanel),
+                MenuBarMessage::CommandSaveFile=> self
+                    .file_panel
+                    .update(FilePanelMessage::OperationSaveFileData)
+                    .map(AppMessage::FilePanel),
                 _ => self
                     .menu_bar
                     .update(menu_bar_message)
@@ -93,7 +101,7 @@ impl App {
                     .map(AppMessage::Preview),
                 EditorMessage::SendSaveRequestToSaveFileData(file_data) => self
                     .file_panel
-                    .update(FilePanelMessage::SaveFileDataFromEditor(file_data))
+                    .update(FilePanelMessage::AutoSaveFileDataFromEditor(file_data))
                     .map(AppMessage::FilePanel),
                 _ => self.editor.update(editor_message).map(AppMessage::Editor),
             },

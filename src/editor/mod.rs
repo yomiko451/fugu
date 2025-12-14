@@ -2,13 +2,13 @@ use std::sync::Arc;
 
 use crate::common::*;
 use iced::{
-    Background, Border, Color, Element, Length, Padding, Subscription, Task, Theme,
-    border::Radius,
-    widget::{Container, column, container, row, rule, space, text, text_editor},
+    alignment::Vertical, border::Radius, mouse, widget::{
+        column, container, mouse_area, row, rule, space, stack, text, text_editor, text_input, Container, Row
+    }, Background, Border, Color, Element, Length, Padding, Subscription, Task, Theme
 };
+use iced_aw::style::colors::PALE_GREEN;
 use tracing::info;
 
-mod clipboard;
 mod operation;
 mod snapshot;
 
@@ -18,22 +18,20 @@ pub struct Editor {
     is_content_changed: bool,
     last_edited_at: Option<iced::time::Instant>,
     editor_content: text_editor::Content,
-    snap_shot: Vec<SnapShot>, //history: VecDeque<text_editor::Action>,
+    input_content: String,
+    input_flag: bool,
+    auto_save: bool,
+    snap_shot: Vec<FileData>, //history: VecDeque<text_editor::Action>,
                               //undo_stack: Vec<text_editor::Action>,                               //redo_stack: Vec<text_editor::Action>,
-}
-
-#[derive(Debug, Clone)]
-struct SnapShot {
-    created_at: String,
-    name: String,
-    content: String,
 }
 
 #[derive(Debug, Clone)]
 pub enum EditorMessage {
     EditorAction(text_editor::Action),
+    InputAction(String),
     DebounceTick(iced::time::Instant),
-    AddSnapShot(String),
+    AddSnapShot(u32),
+    ShowRenameInput,
 
     SendNewContentToPreview(Arc<String>),
     SendSaveRequestToSaveFileData(FileData),
@@ -48,8 +46,11 @@ impl Editor {
             //auto_save: bool, // 开了会不会出现手动和自动保存竞态?
             last_edited_at: None,
             editor_content: text_editor::Content::default(),
+            input_content: "".to_string(),
             snap_shot: vec![],
             is_content_changed: false,
+            input_flag: false,
+            auto_save: true,
             //history: VecDeque::with_capacity(100),
             //undo_stack: vec![],
             //redo_stack: vec![],
@@ -58,6 +59,10 @@ impl Editor {
 
     pub fn update(&mut self, editor_message: EditorMessage) -> Task<EditorMessage> {
         match editor_message {
+            EditorMessage::ShowRenameInput => {
+                self.input_flag = !self.input_flag;
+                Task::none()
+            }
             EditorMessage::EditorAction(action) => {
                 //self.history.push_back(action.clone());
                 let is_edit = action.is_edit();
@@ -141,20 +146,56 @@ impl Editor {
     }
 
     pub fn generate_editor_component(&self) -> Element<'_, EditorMessage> {
-        let name = if let Some(file_data) = &self.selected_file {
-            if self.is_content_changed {
-                format!("{} *", file_data.name)
-            } else {
-                file_data.name.clone()
+        let mut file_name_bar = Row::new()
+        .width(Length::Fill)
+        .padding(Padding::from([PADDING_SMALLER, PADDING_BIGGER]))
+        .height(Length::Shrink);
+        if let Some(file_data) = &self.selected_file {
+            if self.auto_save {
+                file_name_bar = file_name_bar.push(text("自动保存 ")
+                    .size(FONT_SIZE_BIGGER)
+                    .style(|theme: &Theme| {
+                        let palette = theme.palette();
+                        text::Style {
+                            color: Some(palette.success)
+                        }
+                    }))
             }
-        } else {
-            "".to_string()
-        };
+            file_name_bar = file_name_bar.push(text(&file_data.name).size(FONT_SIZE_BIGGER));
+        }
+        if self.is_content_changed {
+            file_name_bar = file_name_bar.push(text!(" *").size(FONT_SIZE_BIGGER));
+        } 
+        
+        let file_name_input: Element<EditorMessage> = text_input("", &self.input_content)
+            .on_input(EditorMessage::InputAction)
+            .on_submit(EditorMessage::ShowRenameInput)
+            .padding(Padding::from([PADDING_SMALLER, PADDING_BIGGER]))
+            .size(FONT_SIZE_BIGGER)
+            .style(|theme: &Theme, _| {
+                let palette = theme.palette();
+                text_input::Style {
+                    background: Background::Color(Color::TRANSPARENT),
+                    placeholder: palette.text,
+                    value: palette.text,
+                    border: Border::default(),
+                    selection: palette.background,
+                    icon: palette.text,
+                }
+            })
+            .into();
         column![
-            row![text(name).width(Length::Fill).size(FONT_SIZE_BIGGER)]
-                .padding(Padding::from([PADDING_SMALLER, PADDING_BIGGER]))
-                .height(Length::Shrink),
-            rule::horizontal(1).style(|theme: &Theme| {
+            if !self.input_flag {
+                mouse_area(
+                    file_name_bar
+                )
+                .interaction(mouse::Interaction::Pointer)
+                .on_press(EditorMessage::ShowRenameInput)
+                .into()
+            } else {
+                file_name_input
+            },
+            mouse_area(rule::horizontal(1).style(|theme: &Theme| {
                 let ex_palette = theme.extended_palette();
                 rule::Style {
                     color: ex_palette.background.weaker.color,
@@ -162,7 +203,7 @@ impl Editor {
                     snap: true,
                     fill_mode: rule::FillMode::Full,
                 }
-            }),
+            })).interaction(mouse::Interaction::Text),
             text_editor(&self.editor_content)
                 .on_action(EditorMessage::EditorAction)
                 .height(Length::Fill)

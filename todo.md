@@ -15,3 +15,5 @@ LoadFileTree不要用tree.unwrap，改改类型
 
 读取文件树添加防止爆栈逻辑
 
+设置添加checkbox是否开启自动保存
+
