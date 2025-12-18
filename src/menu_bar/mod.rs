@@ -97,7 +97,7 @@ impl MenuBar {
         let setting_menu = self.generate_menu(
             "设置(S)",
             vec![
-                ("预览窗口", MenuBarMessage::None),
+                ("自动保存", MenuBarMessage::None),
                 ("快照窗口", MenuBarMessage::None),
                 ("日志窗口", MenuBarMessage::None),
                 ("剪切板窗口", MenuBarMessage::None),

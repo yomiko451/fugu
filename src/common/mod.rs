@@ -6,7 +6,10 @@ pub struct FileData {
     pub name: String,
     pub content: Arc<String>,
 }
-
+#[derive(Debug, Clone)]
+pub struct AppSetting {
+    pub auto_save: bool,
+}
 
 //这里主要定义各种常量
 // 
@@ -69,6 +72,11 @@ pub const SHADOW_BASE_0_OFFSET: Shadow = Shadow {
     blur_radius: 10.,
     offset: Vector::ZERO
 };
+// 默认设置
+pub const DEFAULT_SETTING: AppSetting = AppSetting {
+    auto_save: false
+};
+
 
 // 文件区相关常量
 pub const TEXT_INDENTATION: u16 = 15;

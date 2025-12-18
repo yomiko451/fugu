@@ -1,8 +1,7 @@
+use std::sync::Arc;
+
 use crate::{
-    editor::{Editor, EditorMessage},
-    file_panel::{FilePanel, FilePanelMessage},
-    menu_bar::{MenuBar, MenuBarMessage},
-    preview::{Preview, PreviewMessage},
+    common::{AppSetting, DEFAULT_SETTING}, editor::{Editor, EditorMessage}, file_panel::{FilePanel, FilePanelMessage}, menu_bar::{MenuBar, MenuBarMessage}, preview::{Preview, PreviewMessage}
 };
 use iced::{
     Element, Length, Subscription, Task,
@@ -18,6 +17,7 @@ pub struct App {
     preview: Preview,
     file_panel: FilePanel,
     menu_bar: MenuBar,
+    setting: AppSetting
 }
 
 #[derive(Debug, Clone)]
@@ -32,7 +32,7 @@ pub enum AppMessage {
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub fn new() -> (Self, Task<AppMessage>) {
         // 初始化日志
         // let file_appender = rolling::daily("logs", "app.log");
         // let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
@@ -43,17 +43,21 @@ impl App {
         //     .with_writer(non_blocking)
         //     .init();
         //
-
         tracing_subscriber::fmt()
             .with_env_filter(EnvFilter::new("fugu=info"))
             .init();
         info!("应用启动！");
-        Self {
+        let app = Self {
             editor: Editor::new(),
             preview: Preview::new(),
             file_panel: FilePanel::new(),
             menu_bar: MenuBar::new(),
-        }
+            setting: DEFAULT_SETTING,
+        };
+        let task = Task::batch([
+            Task::none()
+        ]);
+        (app, task)
     }
 
     pub fn update(&mut self, app_message: AppMessage) -> Task<AppMessage> {
@@ -69,26 +73,26 @@ impl App {
                     .map(AppMessage::Editor),
                 _ => self
                     .file_panel
-                    .update(file_panel_message)
+                    .update(file_panel_message, &self.setting)
                     .map(AppMessage::FilePanel),
             },
             AppMessage::MenuBar(menu_bar_message) => match menu_bar_message {
                 MenuBarMessage::CommandOpenFolder => self
                     .file_panel
-                    .update(FilePanelMessage::OperationOpenFolder)
+                    .update(FilePanelMessage::OperationOpenFolder, &self.setting)
                     .map(AppMessage::FilePanel),
                 MenuBarMessage::CommandOpenFile => self
                     .file_panel
-                    .update(FilePanelMessage::OperationOpenFile)
+                    .update(FilePanelMessage::OperationOpenFile, &self.setting)
                     .map(AppMessage::FilePanel),
                 MenuBarMessage::CommandCreateNewFile => self
                     .file_panel
-                    .update(FilePanelMessage::OperationCreateNewFile)
+                    .update(FilePanelMessage::OperationCreateNewFile, &self.setting)
                     .map(AppMessage::FilePanel),
                 MenuBarMessage::CommandSaveFile=> self
-                    .file_panel
-                    .update(FilePanelMessage::OperationSaveFileData)
-                    .map(AppMessage::FilePanel),
+                    .editor
+                    .update(EditorMessage::ManualSave)
+                    .map(AppMessage::Editor),
                 _ => self
                     .menu_bar
                     .update(menu_bar_message)
@@ -99,9 +103,9 @@ impl App {
                     .preview
                     .update(PreviewMessage::SyncContnetWithEditor(new_content))
                     .map(AppMessage::Preview),
-                EditorMessage::SendSaveRequestToSaveFileData(file_data) => self
+                EditorMessage::SendSaveRequestToFileData(file_data) => self
                     .file_panel
-                    .update(FilePanelMessage::AutoSaveFileDataFromEditor(file_data))
+                    .update(FilePanelMessage::SaveFileDataFromEditor(file_data), &self.setting)
                     .map(AppMessage::FilePanel),
                 _ => self.editor.update(editor_message).map(AppMessage::Editor),
             },
