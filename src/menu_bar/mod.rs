@@ -2,7 +2,7 @@ use iced::{
     Background, Border, Color, Element, Length, Padding, Renderer, Task, Theme,
     border::Radius,
     mouse,
-    widget::{Container, MouseArea, container, mouse_area, text},
+    widget::{Container, MouseArea, canvas::path::lyon_path::NO_ATTRIBUTES, container, mouse_area, text},
 };
 use iced_aw::{Menu, menu::Item};
 
@@ -21,6 +21,8 @@ pub enum MenuBarMessage {
     CommandOpenFile,
     CommandCreateNewFile,
     CommandSaveFile,
+    CommandSaveAs,
+    SettingAutoSave(bool)
 }
 
 impl MenuBar {
@@ -38,8 +40,8 @@ impl MenuBar {
         }
     }
 
-    pub fn view(&self) -> Container<'_, MenuBarMessage> {
-        container(self.create_menu_bar())
+    pub fn view(&self, setting: &AppSetting) -> Container<'_, MenuBarMessage> {
+        container(self.create_menu_bar(setting))
             .padding(Padding::from([PADDING_SMALLER, PADDING_BIGGER]))
             .style(|theme: &Theme| {
                 let ex_palette = theme.extended_palette();
@@ -50,67 +52,67 @@ impl MenuBar {
             })
     }
 
-    pub fn create_menu_bar(&self) -> Element<'_, MenuBarMessage> {
+    pub fn create_menu_bar(&self, setting: &AppSetting) -> Element<'_, MenuBarMessage> {
         let file_menu = self.generate_menu(
             "文件(F)",
             vec![
-                ("新建文件", MenuBarMessage::CommandCreateNewFile),
-                ("打开文件", MenuBarMessage::CommandOpenFile),
-                ("保存文件", MenuBarMessage::CommandSaveFile),
-                ("打开文件夹", MenuBarMessage::CommandOpenFolder),
-                ("文件另存为", MenuBarMessage::None),
+                ("新建文件", MenuBarMessage::CommandCreateNewFile, None),
+                ("打开文件", MenuBarMessage::CommandOpenFile, None),
+                ("保存文件", MenuBarMessage::CommandSaveFile, None),
+                ("打开文件夹", MenuBarMessage::CommandOpenFolder, None),
+                ("文件另存为", MenuBarMessage::CommandSaveAs, None),
             ],
         );
 
         let edit_menu = self.generate_menu(
             "编辑(E)",
             vec![
-                ("撤销", MenuBarMessage::None),
-                ("重做", MenuBarMessage::None),
-                ("剪切", MenuBarMessage::None),
-                ("复制", MenuBarMessage::None),
-                ("粘贴", MenuBarMessage::None),
-                ("删除", MenuBarMessage::None),
-                ("全选", MenuBarMessage::None),
+                ("撤销", MenuBarMessage::None, None),
+                ("重做", MenuBarMessage::None, None),
+                ("剪切", MenuBarMessage::None, None),
+                ("复制", MenuBarMessage::None, None),
+                ("粘贴", MenuBarMessage::None, None),
+                ("删除", MenuBarMessage::None, None),
+                ("全选", MenuBarMessage::None, None),
             ],
         );
 
         let view_menu = self.generate_menu(
             "视图(V)",
             vec![
-                ("预览窗口", MenuBarMessage::None),
-                ("快照窗口", MenuBarMessage::None),
-                ("日志窗口", MenuBarMessage::None),
-                ("剪切板窗口", MenuBarMessage::None),
+                ("预览窗口", MenuBarMessage::None, None),
+                ("快照窗口", MenuBarMessage::None, None),
+                ("日志窗口", MenuBarMessage::None, None),
+                ("剪切板窗口", MenuBarMessage::None, None),
             ],
         );
         
         let tool_menu = self.generate_menu(
             "工具(T)",
             vec![
-                ("创建快照", MenuBarMessage::None),
-                ("恢复快照", MenuBarMessage::None),
-                ("删除快照", MenuBarMessage::None),
+                ("创建快照", MenuBarMessage::None, None),
+                ("恢复快照", MenuBarMessage::None, None),
+                ("删除快照", MenuBarMessage::None, None),
             ],
         );
 
         let setting_menu = self.generate_menu(
             "设置(S)",
             vec![
-                ("自动保存", MenuBarMessage::None),
-                ("快照窗口", MenuBarMessage::None),
-                ("日志窗口", MenuBarMessage::None),
-                ("剪切板窗口", MenuBarMessage::None),
+                ("自动保存", MenuBarMessage::SettingAutoSave(!setting.auto_save), Some(setting.auto_save)),
+                ("快照窗口", MenuBarMessage::None, None),
+                ("日志窗口", MenuBarMessage::None, None),
+                ("剪切板窗口", MenuBarMessage::None, None),
             ],
         );
 
         let help_menu = self.generate_menu(
             "帮助(H)",
             vec![
-                ("预览窗口", MenuBarMessage::None),
-                ("快照窗口", MenuBarMessage::None),
-                ("日志窗口", MenuBarMessage::None),
-                ("剪切板窗口", MenuBarMessage::None),
+                ("预览窗口", MenuBarMessage::None, None),
+                ("快照窗口", MenuBarMessage::None, None),
+                ("日志窗口", MenuBarMessage::None, None),
+                ("剪切板窗口", MenuBarMessage::None, None),
             ],
         );
 
@@ -132,12 +134,24 @@ impl MenuBar {
 
     pub fn generate_menu_item(
         &self,
-        menu_text: String,
+        menu_text: &'static str,
         id: usize,
         message: MenuBarMessage,
+        color_change_flag: Option<bool>
     ) -> MouseArea<'_, MenuBarMessage> {
         mouse_area(
-            container(text(menu_text).width(Length::Fill).size(FONT_SIZE_BASE))
+            container(text(menu_text).width(Length::Fill).size(FONT_SIZE_BASE)
+                .style(move |theme: &Theme| {
+                    let palette = theme.palette();
+                    let text_color = if color_change_flag == Some(true) {
+                        palette.success
+                    } else {
+                        palette.text
+                    };
+                    text::Style {
+                        color: Some(text_color)
+                    }
+                }))
                 .padding(Padding::from([PADDING_SMALLER, PADDING_BASE]))
                 .style(move |theme: &Theme| {
                     let ex_palette = theme.extended_palette();
@@ -169,7 +183,7 @@ impl MenuBar {
     pub fn generate_menu(
         &self,
         label: &'static str,
-        sub_item: Vec<(&'static str, MenuBarMessage)>,
+        sub_item: Vec<(&'static str, MenuBarMessage, Option<bool>)>,
     ) -> Item<'_, MenuBarMessage, Theme, Renderer> {
         Item::with_menu(
             mouse_area(text(label).size(FONT_SIZE_BIGGER)).interaction(mouse::Interaction::Pointer),
@@ -177,8 +191,8 @@ impl MenuBar {
                 sub_item
                     .into_iter()
                     .enumerate()
-                    .map(|(id, (menu_text, message))| {
-                        let item = self.generate_menu_item(menu_text.to_string(), id, message);
+                    .map(|(id, (menu_text, message, color_change_flag))| {
+                        let item = self.generate_menu_item(menu_text, id, message, color_change_flag);
                         Item::new(item)
                     })
                     .collect(),

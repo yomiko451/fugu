@@ -65,11 +65,11 @@ impl App {
             AppMessage::FilePanel(file_panel_message) => match file_panel_message {
                 FilePanelMessage::SendSelectedFileDataToEditor(file_data) => self
                     .editor
-                    .update(EditorMessage::LoadFileDataFromFilePanel(file_data))
+                    .update(EditorMessage::LoadFileDataFromFilePanel(file_data), &self.setting)
                     .map(AppMessage::Editor),
-                FilePanelMessage::SendSaveSuccessToEditor => self
+                FilePanelMessage::ReturnSaveResult(operation_result) => self
                     .editor
-                    .update(EditorMessage::GetSaveSuccessFromFilePanel)
+                    .update(EditorMessage::HandleSaveResult(operation_result), &self.setting)
                     .map(AppMessage::Editor),
                 _ => self
                     .file_panel
@@ -91,8 +91,16 @@ impl App {
                     .map(AppMessage::FilePanel),
                 MenuBarMessage::CommandSaveFile=> self
                     .editor
-                    .update(EditorMessage::ManualSave)
+                    .update(EditorMessage::SaveRequested, &self.setting)
                     .map(AppMessage::Editor),
+                MenuBarMessage::CommandSaveAs=> self
+                    .editor
+                    .update(EditorMessage::SaveAsRequested, &self.setting)
+                    .map(AppMessage::Editor),
+                MenuBarMessage::SettingAutoSave(auto_save) => {
+                    self.setting.auto_save = auto_save;
+                    Task::none()
+                }
                 _ => self
                     .menu_bar
                     .update(menu_bar_message)
@@ -103,11 +111,19 @@ impl App {
                     .preview
                     .update(PreviewMessage::SyncContnetWithEditor(new_content))
                     .map(AppMessage::Preview),
-                EditorMessage::SendSaveRequestToFileData(file_data) => self
+                EditorMessage::AutoSaveToFile(file_data) => self
                     .file_panel
-                    .update(FilePanelMessage::SaveFileDataFromEditor(file_data), &self.setting)
+                    .update(FilePanelMessage::OperationAutoSave(file_data), &self.setting)
                     .map(AppMessage::FilePanel),
-                _ => self.editor.update(editor_message).map(AppMessage::Editor),
+                EditorMessage::FileSaveAs(file_data) => self
+                    .file_panel
+                    .update(FilePanelMessage::OperationSaveAs(file_data), &self.setting)
+                    .map(AppMessage::FilePanel),
+                EditorMessage::SaveToFile(file_data) => self
+                    .file_panel
+                    .update(FilePanelMessage::OperationSaveFile(file_data), &self.setting)
+                    .map(AppMessage::FilePanel),
+                _ => self.editor.update(editor_message, &self.setting).map(AppMessage::Editor),
             },
             AppMessage::Preview(preview_message) => match preview_message {
                 _ => self
@@ -122,7 +138,7 @@ impl App {
     pub fn view(&self) -> Element<'_, AppMessage> {
         let menu_bar: Element<'_, MenuBarMessage> = self
             .menu_bar
-            .view()
+            .view(&self.setting)
             .width(Length::Fill)
             .height(Length::Shrink)
             .into();
@@ -165,6 +181,8 @@ impl App {
     }
 
     pub fn subscription(&self) -> Subscription<AppMessage> {
-        Subscription::batch([self.editor.subscription().map(AppMessage::Editor)])
+        Subscription::batch([
+            
+        ])
     }
 }

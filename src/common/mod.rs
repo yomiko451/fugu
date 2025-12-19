@@ -1,15 +1,22 @@
 use std::{path::PathBuf, sync::{Arc, LazyLock}};
+use tracing::{info, error};
 use iced::{theme::Palette, Color, Shadow, Theme, Vector};
 // 这里定义各种公共类型
 #[derive(Debug, Clone)]
 pub struct FileData {
-    pub name: String,
+    pub version: u64,
     pub content: Arc<String>,
 }
 #[derive(Debug, Clone)]
 pub struct AppSetting {
     pub auto_save: bool,
 }
+#[derive(Debug, Clone)]
+pub enum OperationResult {
+    Ok(String),
+    Err(String)
+}
+
 
 //这里主要定义各种常量
 // 

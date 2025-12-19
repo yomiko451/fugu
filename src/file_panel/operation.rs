@@ -26,6 +26,7 @@ pub struct FileNode {
     pub id: u32,
     pub is_dir: bool,
     pub expanded: bool,
+    pub version: u64,
     pub file_name: String,
     pub path: Option<PathBuf>,
     pub content_cache: Option<Arc<String>>,
@@ -51,26 +52,20 @@ pub async fn open_folder_dialog() -> Option<PathBuf> {
     Some(path.path().to_path_buf())
 }
 
-pub async fn save_file_dialog(file_name: String) -> anyhow::Result<PathBuf> {
-    let result = rfd::AsyncFileDialog::new()
+pub async fn save_file_dialog(file_name: String) -> Option<PathBuf> {
+    rfd::AsyncFileDialog::new()
         .add_filter("markdown文件(*md)", &["md"])
         .set_file_name(file_name)
         .set_title("保存文件")
         .save_file()
-        .await;
-
-    if let Some(file_handle) = result {
-        Ok(file_handle.path().to_path_buf())
-    } else {
-        Err(anyhow!("FileHandle路径为空!"))
-    }
+        .await
+    .map(|file_handle| file_handle.path().to_path_buf())
 }
 
 pub async fn read_file(path: PathBuf) -> anyhow::Result<FileData> {
     let content = tokio::fs::read_to_string(&path).await?;
-    let name = path.file_name().unwrap().to_string_lossy().into_owned();
     let file_data = FileData {
-        name,
+        version: 0,
         content: Arc::new(content),
     };
     Ok(file_data)
@@ -93,6 +88,7 @@ pub async fn load_file_tree(path: PathBuf) -> anyhow::Result<(u32, HashMap<u32, 
         is_dir: path.is_dir(),
         id: root_file_node_key,
         expanded: true,
+        version: 0,
         path: Some(path.to_path_buf()),
         file_name: path
             .file_name()
@@ -119,6 +115,7 @@ pub async fn load_file_tree(path: PathBuf) -> anyhow::Result<(u32, HashMap<u32, 
                         is_dir: path.is_dir(),
                         id: get_next_id(),
                         expanded: false,
+                        version: 0,
                         path: Some(path.clone()),
                         file_name: path
                             .file_name()
@@ -141,6 +138,7 @@ pub async fn load_file_tree(path: PathBuf) -> anyhow::Result<(u32, HashMap<u32, 
                     is_dir: path.is_dir(),
                     id: get_next_id(),
                     expanded: false,
+                    version: 0,
                     path: Some(path.clone()),
                     file_name: path
                         .file_name()
