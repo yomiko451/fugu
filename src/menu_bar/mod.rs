@@ -8,7 +8,7 @@ use iced_aw::{Menu, menu::Item};
 
 use crate::common::*;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct MenuBar {
     hovered_id: Option<usize>,
 }

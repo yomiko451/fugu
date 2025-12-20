@@ -11,7 +11,7 @@ use tracing::{error, info, warn};
 use tracing_appender::rolling;
 use tracing_subscriber::EnvFilter;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct App {
     editor: Editor,
     preview: Preview,
@@ -182,7 +182,7 @@ impl App {
 
     pub fn subscription(&self) -> Subscription<AppMessage> {
         Subscription::batch([
-            
+            self.preview.subscription().map(AppMessage::Preview)
         ])
     }
 }

@@ -11,7 +11,7 @@ use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tracing::{error, info, warn};
 mod operation; // 各种文件操作，新建、删除、重命名、移动等
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct FilePanel {
     roo_path: Option<PathBuf>,
     workplace_root_key: Option<u32>,
@@ -35,7 +35,7 @@ pub enum FilePanelMessage {
     OperationAutoSave(FileData),
     OperationSaveFile(FileData),
     OperationSaveAs(FileData),
-    ReturnSaveResult(OperationResult),
+    ReturnSaveResult(Result<(), AppError>),
 
     SendSelectedFileDataToEditor(FileData),
 
@@ -258,20 +258,23 @@ impl FilePanel {
                             return Task::perform(
                                 operation::save_file(path.clone(), file_data.content),
                                 |result| match result {
-                                    Ok(_) => FilePanelMessage::ReturnSaveResult(
-                                        OperationResult::Ok("文件自动保存成功!".to_string()),
-                                    ),
-                                    Err(error) => FilePanelMessage::ReturnSaveResult(OperationResult::Err(error.to_string())),
+                                    Ok(_) => {
+                                        info!("文件自动保存成功!");
+                                        FilePanelMessage::ReturnSaveResult(
+                                        Ok(()),
+                                    )},
+                                    Err(error) => FilePanelMessage::ReturnSaveResult(Err(error)),
                                 },
                             );
                         } else {
+                            info!("文件保存缓冲区成功!");
                             return Task::done(FilePanelMessage::ReturnSaveResult(
-                                OperationResult::Ok("文件保存缓冲区成功!".to_string()),
+                                Ok(()),
                             ));
                         }
                     };
                 }
-                Task::done(FilePanelMessage::ReturnSaveResult(OperationResult::Err("文件自动保存失败!".to_string())))
+                Task::done(FilePanelMessage::ReturnSaveResult(Err(AppError::FilePanelError("文件自动保存失败!".to_string()))))
             }
             FilePanelMessage::OperationSaveFile(file_data) => {
                 if let Some(key) = self.selected_file_node_id {
@@ -282,10 +285,12 @@ impl FilePanel {
                             return Task::perform(
                                 operation::save_file(path.clone(), file_data.content),
                                 |result| match result {
-                                    Ok(_) => FilePanelMessage::ReturnSaveResult(
-                                        OperationResult::Ok("文件手动保存成功!".to_string()),
-                                    ),
-                                    Err(error) => FilePanelMessage::ReturnSaveResult(OperationResult::Err(error.to_string())),
+                                    Ok(_) => {
+                                        info!("文件手动保存成功!");
+                                        FilePanelMessage::ReturnSaveResult(
+                                        Ok(()),
+                                    )}
+                                    Err(error) => FilePanelMessage::ReturnSaveResult(Err(error)),
                                 },
                             );
                         } else {
@@ -293,7 +298,7 @@ impl FilePanel {
                         }
                     };
                 }
-                Task::done(FilePanelMessage::ReturnSaveResult(OperationResult::Err("文件保存失败!".to_string())))
+                Task::done(FilePanelMessage::ReturnSaveResult(Err(AppError::FilePanelError("文件保存失败!".to_string()))))
             }
             FilePanelMessage::OperationSaveAs(file_data) => {
                 if let Some(key) = self.selected_file_node_id {
@@ -329,16 +334,12 @@ impl FilePanel {
                 .padding(PADDING_BASE)
                 .height(Length::Fill),
             container(
-                row![
-                    text("恢复").size(FONT_SIZE_BASE),
-                    space::horizontal(),
-                    text("恢复").size(FONT_SIZE_BASE)
-                ]
-                .width(Length::Fill)
-                .spacing(SPACING)
+                // 去除默认添加的临时工作区根节点所以要 -1 
+                text!("文件节点数  {}", self.all_file_nodes.len() - 1).size(FONT_SIZE_BASE),
             )
             .padding(Padding::from([PADDING_SMALLER, PADDING_BIGGER]))
             .height(Length::Shrink)
+            .width(Length::Fill)
             .style(|theme: &Theme| {
                 let ex_palette = theme.extended_palette();
                 container::Style {

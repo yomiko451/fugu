@@ -1,5 +1,4 @@
-use crate::{common::*, file_panel::FilePanelMessage};
-use anyhow::{Ok, anyhow};
+use crate::{app::App, common::*, file_panel::FilePanelMessage};
 use iced::{
     Background, Color, Length, Padding, Theme, mouse,
     widget::{Column, Row, column, container, mouse_area, text},
@@ -62,7 +61,7 @@ pub async fn save_file_dialog(file_name: String) -> Option<PathBuf> {
     .map(|file_handle| file_handle.path().to_path_buf())
 }
 
-pub async fn read_file(path: PathBuf) -> anyhow::Result<FileData> {
+pub async fn read_file(path: PathBuf) -> Result<FileData, AppError> {
     let content = tokio::fs::read_to_string(&path).await?;
     let file_data = FileData {
         version: 0,
@@ -71,7 +70,7 @@ pub async fn read_file(path: PathBuf) -> anyhow::Result<FileData> {
     Ok(file_data)
 }
 
-pub async fn save_file(path: PathBuf, content: Arc<String>) -> anyhow::Result<()> {
+pub async fn save_file(path: PathBuf, content: Arc<String>) -> Result<(), AppError> {
     let mut file = tokio::fs::File::create(path).await?;
     file.write_all(content.as_bytes()).await?;
     Ok(())
@@ -81,7 +80,7 @@ pub async fn save_file(path: PathBuf, content: Arc<String>) -> anyhow::Result<()
 // pub struct FileTree(pub Vec<FileNode>);
 
 // 异步读取文件并生成节点树
-pub async fn load_file_tree(path: PathBuf) -> anyhow::Result<(u32, HashMap<u32, FileNode>)> {
+pub async fn load_file_tree(path: PathBuf) -> Result<(u32, HashMap<u32, FileNode>), AppError> {
     let mut file_tree = HashMap::new();
     let root_file_node_key = get_next_id();
     let root_node = FileNode {
@@ -157,7 +156,7 @@ pub async fn load_file_tree(path: PathBuf) -> anyhow::Result<(u32, HashMap<u32, 
         }
     }
 
-    anyhow::Ok((root_file_node_key, file_tree))
+    Ok((root_file_node_key, file_tree))
 }
 
 // 递归渲染节点树

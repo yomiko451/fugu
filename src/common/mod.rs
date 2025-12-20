@@ -1,22 +1,45 @@
-use std::{path::PathBuf, sync::{Arc, LazyLock}};
-use tracing::{info, error};
+use std::sync::{Arc, LazyLock};
 use iced::{theme::Palette, Color, Shadow, Theme, Vector};
 // 这里定义各种公共类型
+// FileData用于文件区和编辑区交互
 #[derive(Debug, Clone)]
 pub struct FileData {
     pub version: u64,
     pub content: Arc<String>,
 }
+// 包括各种App设定
 #[derive(Debug, Clone)]
 pub struct AppSetting {
     pub auto_save: bool,
 }
+// 全局错误类型
 #[derive(Debug, Clone)]
-pub enum OperationResult {
-    Ok(String),
-    Err(String)
+pub enum AppError {
+    FilePanelError(String),
+    EditorError(String),
+    PreviewError(String),
+    MenuBarError(String),
+    OtherError(String)
+}
+impl std::fmt::Display for AppError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AppError::FilePanelError(error) => write!(f, "文件模块错误：{}", error),
+            AppError::EditorError(error) => write!(f, "编辑模块错误：{}", error),
+            AppError::PreviewError(error) => write!(f, "预览模块错误：{}", error),
+            AppError::MenuBarError(error) => write!(f, "菜单模块错误：{}", error),
+            AppError::OtherError(error) => write!(f, "其他错误：{}", error),
+        }
+    }
 }
 
+impl std::error::Error for AppError {}
+
+impl From<std::io::Error> for AppError {
+    fn from(value: std::io::Error) -> Self {
+        AppError::FilePanelError(value.to_string())
+    }
+}
 
 //这里主要定义各种常量
 // 

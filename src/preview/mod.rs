@@ -1,21 +1,27 @@
-use std::{fmt::write, sync::Arc};
-
-use iced::{
-    alignment::{Horizontal, Vertical::Bottom}, border::Radius, mouse, overlay::menu, widget::{
-        column, combo_box, container, markdown, mouse_area, pick_list, row, rule, scrollable, space, text, text_editor, Container
-    }, Background, Border, Color, Element, Length, Padding, Shadow, Task, Theme
-};
-use tracing::info;
-
 use crate::common::*;
+use iced::{
+    Background, Border, Color, Element, Length, Padding, Shadow, Subscription, Task, Theme,
+    alignment::Horizontal,
+    border::Radius,
+    mouse,
+    overlay::menu,
+    widget::{
+        Container, column, container, markdown, mouse_area, pick_list, row, rule, scrollable,
+        space, text, text_editor,
+    },
+};
+use jiff::civil::Weekday;
+use std::sync::Arc;
+use tracing::info;
+mod operation;
 
-mod viewer;
-
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Preview {
+    current_weekday: String,
+    current_date_time: String,
     current_page: PreviewPage,
     content: Option<Arc<String>>,
-    marddown: Vec<markdown::Item>,
+    marddown: markdown::Content,
     snap_shot_index_state: Vec<String>,
     current_snap_shot_index: Option<String>,
     current_snapshot_content: text_editor::Content,
@@ -28,6 +34,7 @@ pub enum PreviewMessage {
     EditorAction(text_editor::Action),
     ChangePageTo(PreviewPage),
     ChangeSnapShot(String),
+    UpdateTimeStr,
     None,
 }
 
@@ -42,10 +49,12 @@ pub enum PreviewPage {
 impl Preview {
     pub fn new() -> Self {
         Self {
-            current_page: PreviewPage::SnapShot,
+            current_weekday: Preview::get_week_str(),
+            current_date_time: Preview::get_time_str(),
+            current_page: PreviewPage::MarkDown,
             current_snapshot_content: text_editor::Content::default(),
             content: None,
-            marddown: vec![],
+            marddown: markdown::Content::new(),
             current_snap_shot_index: None,
             snap_shot_index_state: vec![
                 "快照1".to_string(),
@@ -57,13 +66,17 @@ impl Preview {
 
     pub fn update(&mut self, preview_message: PreviewMessage) -> Task<PreviewMessage> {
         match preview_message {
+            PreviewMessage::UpdateTimeStr => {
+                self.current_date_time = Preview::get_time_str();
+                Task::none()
+            }
             PreviewMessage::SyncContnetWithEditor(content) => {
                 self.content = Some(content);
                 Task::done(PreviewMessage::RenderMarkdowm)
             }
             PreviewMessage::RenderMarkdowm => {
                 if let Some(ref content) = self.content {
-                    self.marddown = markdown::parse(content).collect();
+                    self.marddown = markdown::Content::parse(content);
                     info!("文件内容渲染成功!");
                 }
                 Task::none()
@@ -113,12 +126,10 @@ impl Preview {
             preview,
             container(
                 row![
-                    text("恢复").size(FONT_SIZE_BASE),
                     space::horizontal(),
-                    text("恢复").size(FONT_SIZE_BASE)
+                    text!("{}  {}", self.current_date_time, self.current_weekday).size(FONT_SIZE_BASE),
                 ]
                 .width(Length::Fill)
-                .spacing(SPACING)
             )
             .padding(Padding::from([PADDING_SMALLER, PADDING_BIGGER]))
             .height(Length::Shrink)
@@ -137,6 +148,10 @@ impl Preview {
                 ..container::Style::default()
             }
         })
+    }
+
+    pub fn subscription(&self) -> Subscription<PreviewMessage> {
+        iced::time::every(iced::time::Duration::from_secs(1)).map(|_| PreviewMessage::UpdateTimeStr)
     }
 
     pub fn generate_page_change_button(
@@ -173,7 +188,7 @@ impl Preview {
         let hidden_scroller = scrollable::Scrollbar::new().scroller_width(0).width(0);
         container(
             scrollable(
-                markdown::view(&self.marddown, DEFAULT_THEME.clone()).map(|_| PreviewMessage::None),
+                markdown::view(self.marddown.items(), DEFAULT_THEME.clone()).map(|_| PreviewMessage::None),
             )
             .direction(scrollable::Direction::Vertical(hidden_scroller)),
         )
@@ -203,7 +218,8 @@ impl Preview {
                         placeholder_color: palette.text,
                         handle_color: palette.text,
                     }
-                }).menu_style(|theme: &Theme| {
+                })
+                .menu_style(|theme: &Theme| {
                     let ex_palette = theme.extended_palette();
                     let palette = theme.palette();
                     menu::Style {
@@ -251,5 +267,23 @@ impl Preview {
                 })
         ]
         .into()
+    }
+
+    pub fn get_time_str() -> String {
+        let now = jiff::Zoned::now();
+        now.strftime("%Y/%m/%d  %H:%M:%S").to_string()
+    }
+    
+    pub fn get_week_str() -> String {
+        let weekday = jiff::Zoned::now().weekday();
+        match weekday {
+            Weekday::Monday => "星期一".to_string(),
+            Weekday::Tuesday => "星期二".to_string(),
+            Weekday::Wednesday => "星期三".to_string(),
+            Weekday::Thursday => "星期四".to_string(),
+            Weekday::Friday => "星期五".to_string(),
+            Weekday::Saturday => "星期六".to_string(),
+            Weekday::Sunday => "星期天".to_string(),
+        }
     }
 }
