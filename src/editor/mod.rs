@@ -103,7 +103,8 @@ impl Editor {
             }
             EditorMessage::LoadFileDataFromFilePanel(file_data) => {
                 self.selected_file = Some(file_data.clone());
-                self.editor_content = text_editor::Content::with_text(&file_data.content);
+                self.editor_content = text_editor::Content::new();
+                self.editor_content.perform(text_editor::Action::Edit(text_editor::Edit::Paste(Arc::clone(&file_data.content))));
                 self.original_version = Some(file_data.version);
                 info!("文件内容载入成功!");
                 Task::done(EditorMessage::SendNewContentToPreview(Arc::clone(
@@ -142,7 +143,7 @@ impl Editor {
                 }
                 Task::none()
             }
-            // 各种模态窗口消息
+            // 处理各种子模块模态窗口消息
             EditorMessage::ChangeDialogPage(dialog) => {
                 self.current_dialog = dialog;
                 Task::none()

@@ -1,4 +1,4 @@
-use crate::common::*;
+use crate::{common::*, preview::markdown::{Markdown, MarkdownMessage}};
 use iced::{
     Background, Border, Color, Element, Length, Padding, Shadow, Subscription, Task, Theme,
     alignment::Horizontal,
@@ -6,7 +6,7 @@ use iced::{
     mouse,
     overlay::menu,
     widget::{
-        Container, column, container, markdown, mouse_area, pick_list, row, rule, scrollable,
+        Container, column, container, markdown as iced_markdown, mouse_area, pick_list, row, rule, scrollable,
         space, text, text_editor,
     },
 };
@@ -14,14 +14,17 @@ use jiff::civil::Weekday;
 use std::sync::Arc;
 use tracing::info;
 mod operation;
-
+mod markdown;
+mod viewer;
 #[derive(Debug)]
 pub struct Preview {
     current_weekday: String,
     current_date_time: String,
     current_page: PreviewPage,
+    
+    // 各个字组件
     content: Option<Arc<String>>,
-    marddown: markdown::Content,
+    marddown: Markdown,
     snap_shot_index_state: Vec<String>,
     current_snap_shot_index: Option<String>,
     current_snapshot_content: text_editor::Content,
@@ -30,12 +33,12 @@ pub struct Preview {
 #[derive(Debug, Clone)]
 pub enum PreviewMessage {
     SyncContnetWithEditor(Arc<String>),
-    RenderMarkdowm,
     EditorAction(text_editor::Action),
     ChangePageTo(PreviewPage),
     ChangeSnapShot(String),
     UpdateTimeStr,
-    None,
+    // 处理子模块消息
+    Markdown(MarkdownMessage)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -54,7 +57,7 @@ impl Preview {
             current_page: PreviewPage::MarkDown,
             current_snapshot_content: text_editor::Content::default(),
             content: None,
-            marddown: markdown::Content::new(),
+            marddown: Markdown::default(),
             current_snap_shot_index: None,
             snap_shot_index_state: vec![
                 "快照1".to_string(),
@@ -70,18 +73,11 @@ impl Preview {
                 self.current_date_time = Preview::get_time_str();
                 Task::none()
             }
-            PreviewMessage::SyncContnetWithEditor(content) => {
-                self.content = Some(content);
-                Task::done(PreviewMessage::RenderMarkdowm)
-            }
-            PreviewMessage::RenderMarkdowm => {
-                if let Some(ref content) = self.content {
-                    self.marddown = markdown::Content::parse(content);
-                    info!("文件内容渲染成功!");
-                }
-                Task::none()
+            PreviewMessage::SyncContnetWithEditor(raw) => {
+                self.marddown.update(MarkdownMessage::LoadRawText(raw)).map(PreviewMessage::Markdown)
             }
             PreviewMessage::EditorAction(action) => {
+                // 禁止编辑操作让快照页面只读
                 if !action.is_edit() {
                     self.current_snapshot_content.perform(action);
                 }
@@ -95,15 +91,22 @@ impl Preview {
                 self.current_snap_shot_index = Some(snap_shot_index);
                 Task::none()
             }
+            // 处理各种子模块预览界面消息
+            PreviewMessage::Markdown(markdown_message) => {
+                match markdown_message {
+                    
+                    _ => self.marddown.update(markdown_message).map(PreviewMessage::Markdown)
+                }
+            }
             _ => Task::none(),
         }
     }
 
     pub fn view(&self) -> Container<'_, PreviewMessage> {
         let preview = match self.current_page {
-            PreviewPage::MarkDown => self.generate_markdown_preview(),
+            PreviewPage::MarkDown => self.marddown.view().map(PreviewMessage::Markdown),
             PreviewPage::SnapShot => self.generate_snapshot_component(),
-            _ => self.generate_markdown_preview(),
+            _ => self.marddown.view().map(PreviewMessage::Markdown),
         };
 
         container(column![
@@ -184,19 +187,7 @@ impl Preview {
         .into()
     }
 
-    pub fn generate_markdown_preview(&self) -> Element<'_, PreviewMessage> {
-        let hidden_scroller = scrollable::Scrollbar::new().scroller_width(0).width(0);
-        container(
-            scrollable(
-                markdown::view(self.marddown.items(), DEFAULT_THEME.clone()).map(|_| PreviewMessage::None),
-            )
-            .direction(scrollable::Direction::Vertical(hidden_scroller)),
-        )
-        .height(Length::Fill)
-        .width(Length::Fill)
-        .padding(Padding::from([PADDING_SMALLER, PADDING_BIGGER]))
-        .into()
-    }
+   
 
     pub fn generate_snapshot_component(&self) -> Element<'_, PreviewMessage> {
         column![
