@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::PathBuf, result, sync::Arc};
 use tracing::info;
-use iced::{Element, Length, Padding, Task, widget::{container, image, markdown as iced_markdown, scrollable}, window};
-use crate::{common::*, preview::viewer::CustomViewer};
+use iced::{Element, Length, Padding, Task, widget::{container, image, markdown::{self as iced_markdown, Uri}, scrollable}, window};
+use crate::{common::*, preview::{markdown, viewer::CustomViewer}};
 
 #[derive(Debug, Default)]
 pub struct Markdown {
@@ -14,8 +14,8 @@ pub struct Markdown {
 pub enum MarkdownMessage {
     LoadRawText(Arc<String>),
     RenderMarkdown,
-    HandleImageUrl(iced_markdown::Uri),
-    InsertImageToDict(iced_markdown::Uri, image::Handle),
+    HandleImageUrl(Vec<iced_markdown::Uri>),
+    InsertImageToDict(Vec<(iced_markdown::Uri, image::Handle)>),
     LinkClicked(iced_markdown::Uri)
 }
 
@@ -29,21 +29,26 @@ impl Markdown {
             MarkdownMessage::RenderMarkdown => {
                 if let Some(ref content) = self.raw {
                     self.content = iced_markdown::Content::parse(content);
+                    let url_vec = self.content.images().iter().filter(|url| !self.image.contains_key(url.as_str()) && (url.ends_with("jpg") || url.ends_with("png")))
+                        .cloned().collect::<Vec<iced_markdown::Uri>>();
                     info!("文件内容渲染成功!");
+                    return Task::done(MarkdownMessage::HandleImageUrl(url_vec));
                 }
                 Task::none()
             }
-            MarkdownMessage::HandleImageUrl(url) => {
+            MarkdownMessage::HandleImageUrl(url_vec) => {
                  Task::future(
                         async {
                             tokio::task::spawn_blocking(|| {
-                                let handle = image::Handle::from_path(&url);
-                                (url, handle)
+                                url_vec.into_iter().map(|url| {
+                                    let handle = image::Handle::from_path(&url);
+                                    (url, handle)
+                                }).collect::<Vec<(iced_markdown::Uri, image::Handle)>>()
                             }).await
                         }
                     ).then(|result| {
                         match result {
-                            Ok((url, handle)) => Task::done(MarkdownMessage::InsertImageToDict(url, handle)),
+                            Ok(images) => Task::done(MarkdownMessage::InsertImageToDict(images)),
                             Err(error) => {
                                 info!("{}", error.to_string());
                                 Task::none()
@@ -52,8 +57,8 @@ impl Markdown {
                     })
                 
             }
-            MarkdownMessage::InsertImageToDict(url, handle) => {
-                if !self.image.contains_key(&url) {
+            MarkdownMessage::InsertImageToDict(images) => {
+                for (url, handle) in images {
                     self.image.insert(url, handle);
                 }
                 Task::none()
