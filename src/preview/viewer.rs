@@ -26,12 +26,15 @@ impl<'a> iced_markdown::Viewer<'a, MarkdownMessage> for CustomViewer<'a> {
                 
                 center_x(image(handle)).into()
             } else {
-                println!("{url}");
-                sensor(text!("{}", url))
-                    .key(url.clone())
-                    .delay(iced::time::Duration::from_millis(500))
-                    .on_show(move |_|{println!("emit: {url}"); MarkdownMessage::HandleImageUrl(url.clone())})
-                    .into()
+                if url.ends_with("jpg") || url.ends_with("png") {
+                    sensor(space())
+                        .key_ref(url.as_str())
+                        .delay(iced::time::Duration::from_millis(500))
+                        .on_show(move |_|MarkdownMessage::HandleImageUrl(url.clone()))
+                        .into()
+                } else {
+                    space().into()
+                }
             }
     }
 }

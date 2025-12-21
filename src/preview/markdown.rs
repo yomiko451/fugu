@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::PathBuf, result, sync::Arc};
 use tracing::info;
-use iced::{Element, Length, Padding, Task, widget::{container, image, markdown as iced_markdown, scrollable}};
+use iced::{Element, Length, Padding, Task, widget::{container, image, markdown as iced_markdown, scrollable}, window};
 use crate::{common::*, preview::viewer::CustomViewer};
 
 #[derive(Debug, Default)]
@@ -34,8 +34,7 @@ impl Markdown {
                 Task::none()
             }
             MarkdownMessage::HandleImageUrl(url) => {
-                if url.ends_with("jpg") || url.ends_with("png") {
-                    return Task::future(
+                 Task::future(
                         async {
                             tokio::task::spawn_blocking(|| {
                                 let handle = image::Handle::from_path(&url);
@@ -51,13 +50,11 @@ impl Markdown {
                             }
                         }
                     })
-                }
-                Task::none()
+                
             }
             MarkdownMessage::InsertImageToDict(url, handle) => {
                 if !self.image.contains_key(&url) {
                     self.image.insert(url, handle);
-                    //return Task::done(MarkdownMessage::RenderMarkdown);
                 }
                 Task::none()
             }
