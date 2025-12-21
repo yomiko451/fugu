@@ -1,4 +1,4 @@
-use crate::{common::*, preview::markdown::{Markdown, MarkdownMessage}};
+use crate::{common::*, preview::{image_gallery::{ImageGallery, ImageGalleryMessage}, markdown::{Markdown, MarkdownMessage}}};
 use iced::{
     Background, Border, Color, Element, Length, Padding, Shadow, Subscription, Task, Theme,
     alignment::Horizontal,
@@ -13,6 +13,7 @@ use iced::{
 use jiff::civil::Weekday;
 use std::sync::Arc;
 use tracing::info;
+mod image_gallery;
 mod operation;
 mod markdown;
 mod viewer;
@@ -25,6 +26,7 @@ pub struct Preview {
     // 各个字组件
     content: Option<Arc<String>>,
     marddown: Markdown,
+    image_gallery: ImageGallery,
     snap_shot_index_state: Vec<String>,
     current_snap_shot_index: Option<String>,
     current_snapshot_content: text_editor::Content,
@@ -38,14 +40,15 @@ pub enum PreviewMessage {
     ChangeSnapShot(String),
     UpdateTimeStr,
     // 处理子模块消息
-    Markdown(MarkdownMessage)
+    Markdown(MarkdownMessage),
+    ImageGallery(ImageGalleryMessage)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PreviewPage {
     MarkDown,
     SnapShot,
-    ClipBoard,
+    ImageGallery,
     Log,
 }
 
@@ -58,6 +61,7 @@ impl Preview {
             current_snapshot_content: text_editor::Content::default(),
             content: None,
             marddown: Markdown::default(),
+            image_gallery: ImageGallery::default(),
             current_snap_shot_index: None,
             snap_shot_index_state: vec![
                 "快照1".to_string(),
@@ -98,6 +102,12 @@ impl Preview {
                     _ => self.marddown.update(markdown_message).map(PreviewMessage::Markdown)
                 }
             }
+            PreviewMessage::ImageGallery(image_gallery_message) => {
+                match image_gallery_message {
+                    
+                    _ => self.image_gallery.update(image_gallery_message).map(PreviewMessage::ImageGallery)
+                }
+            }
             _ => Task::none(),
         }
     }
@@ -105,6 +115,7 @@ impl Preview {
     pub fn view(&self) -> Container<'_, PreviewMessage> {
         let preview = match self.current_page {
             PreviewPage::MarkDown => self.marddown.view().map(PreviewMessage::Markdown),
+            PreviewPage::ImageGallery => self.image_gallery.view().map(PreviewMessage::ImageGallery),
             PreviewPage::SnapShot => self.generate_snapshot_component(),
             _ => self.marddown.view().map(PreviewMessage::Markdown),
         };
@@ -113,9 +124,9 @@ impl Preview {
             container(
                 row![
                     self.generate_page_change_button("预览", PreviewPage::MarkDown),
+                    self.generate_page_change_button("图片", PreviewPage::ImageGallery),
                     self.generate_page_change_button("快照", PreviewPage::SnapShot),
                     self.generate_page_change_button("日志", PreviewPage::Log),
-                    self.generate_page_change_button("剪切板", PreviewPage::ClipBoard),
                 ]
                 .height(Length::Shrink)
             )

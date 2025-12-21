@@ -64,6 +64,7 @@ pub const PADDING_SMALLEST: u16 = 2;
 // 默认间距
 pub const SPACING_BIGGER: u32 = 20;
 pub const SPACING: u32 = 10;
+pub const SPACING_SMALLER: u32 = 5;
 //默认边框弧度
 pub const BORDER_RADIUS: f32 = 5.;
 //默认边框宽度

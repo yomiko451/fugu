@@ -2,10 +2,10 @@ use crate::{
     common::*,
     file_panel::operation::{FileNode, load_file_tree},
 };
-use iced::widget::row;
+use iced::{Alignment, border::Radius, mouse, widget::{mouse_area, row}};
 use iced::{
     Background, Element, Length, Padding, Task, Theme,
-    widget::{Column, Container, column, container, scrollable, space, text},
+    widget::{Column, Container, column, container, rule, scrollable, space, text},
 };
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tracing::{error, info, warn};
@@ -260,21 +260,20 @@ impl FilePanel {
                                 |result| match result {
                                     Ok(_) => {
                                         info!("文件自动保存成功!");
-                                        FilePanelMessage::ReturnSaveResult(
-                                        Ok(()),
-                                    )},
+                                        FilePanelMessage::ReturnSaveResult(Ok(()))
+                                    }
                                     Err(error) => FilePanelMessage::ReturnSaveResult(Err(error)),
                                 },
                             );
                         } else {
                             info!("文件保存缓冲区成功!");
-                            return Task::done(FilePanelMessage::ReturnSaveResult(
-                                Ok(()),
-                            ));
+                            return Task::done(FilePanelMessage::ReturnSaveResult(Ok(())));
                         }
                     };
                 }
-                Task::done(FilePanelMessage::ReturnSaveResult(Err(AppError::FilePanelError("文件自动保存失败!".to_string()))))
+                Task::done(FilePanelMessage::ReturnSaveResult(Err(
+                    AppError::FilePanelError("文件自动保存失败!".to_string()),
+                )))
             }
             FilePanelMessage::OperationSaveFile(file_data) => {
                 if let Some(key) = self.selected_file_node_id {
@@ -287,9 +286,8 @@ impl FilePanel {
                                 |result| match result {
                                     Ok(_) => {
                                         info!("文件手动保存成功!");
-                                        FilePanelMessage::ReturnSaveResult(
-                                        Ok(()),
-                                    )}
+                                        FilePanelMessage::ReturnSaveResult(Ok(()))
+                                    }
                                     Err(error) => FilePanelMessage::ReturnSaveResult(Err(error)),
                                 },
                             );
@@ -298,24 +296,28 @@ impl FilePanel {
                         }
                     };
                 }
-                Task::done(FilePanelMessage::ReturnSaveResult(Err(AppError::FilePanelError("文件保存失败!".to_string()))))
+                Task::done(FilePanelMessage::ReturnSaveResult(Err(
+                    AppError::FilePanelError("文件保存失败!".to_string()),
+                )))
             }
             FilePanelMessage::OperationSaveAs(file_data) => {
                 if let Some(key) = self.selected_file_node_id {
                     if let Some(selected_node) = self.all_file_nodes.get(&key) {
-                        return Task::future(
-                            operation::save_file_dialog(selected_node.file_name.clone()),
-                        )
+                        return Task::future(operation::save_file_dialog(
+                            selected_node.file_name.clone(),
+                        ))
                         .then(move |path| match path {
-                            Some(path) => Task::done(FilePanelMessage::UpdateSelectedFilePathAndSave(
-                                path,
-                                file_data.clone(),
-                            )),
+                            Some(path) => {
+                                Task::done(FilePanelMessage::UpdateSelectedFilePathAndSave(
+                                    path,
+                                    file_data.clone(),
+                                ))
+                            }
                             None => {
                                 warn!("文件路径为空!");
                                 Task::none()
                             }
-                        })
+                        });
                     }
                 }
                 Task::none()
@@ -330,11 +332,35 @@ impl FilePanel {
 
     pub fn view(&self) -> Container<'_, FilePanelMessage> {
         container(column![
+            row![
+                
+                mouse_area(text("文件").size(FONT_SIZE_BIGGER)
+                    .width(Length::FillPortion(1))
+                    .align_x(Alignment::Center))
+                    .interaction(mouse::Interaction::Pointer),
+                mouse_area(text("大纲").size(FONT_SIZE_BIGGER)
+                    .width(Length::FillPortion(1))
+                    .align_x(Alignment::Center))
+                    .interaction(mouse::Interaction::Pointer),
+                
+            ]
+            .spacing(SPACING_SMALLER)
+            .padding(Padding::from([PADDING_SMALLER, PADDING_BIGGER]))
+            .height(Length::Shrink),
+            rule::horizontal(1).style(|theme: &Theme| {
+                let ex_palette = theme.extended_palette();
+                rule::Style {
+                    color: ex_palette.background.weaker.color,
+                    radius: Radius::default(),
+                    snap: true,
+                    fill_mode: rule::FillMode::Full,
+                }
+            }),
             container(self.view_file_tree())
                 .padding(PADDING_BASE)
                 .height(Length::Fill),
             container(
-                // 去除默认添加的临时工作区根节点所以要 -1 
+                // 去除默认添加的临时工作区根节点所以要 -1
                 text!("文件节点数  {}", self.all_file_nodes.len() - 1).size(FONT_SIZE_BASE),
             )
             .padding(Padding::from([PADDING_SMALLER, PADDING_BIGGER]))
@@ -359,6 +385,7 @@ impl FilePanel {
 
     // 递归渲染文件树
     pub fn view_file_tree(&self) -> Element<'_, FilePanelMessage> {
+        let hidden_scroller = scrollable::Scrollbar::new().scroller_width(0).width(0);
         let mut workplace_view = Column::new();
         let temp_wordplace_root_node = self
             .all_file_nodes
@@ -366,26 +393,28 @@ impl FilePanel {
             .expect("初始化必定插入此键值对不应当出错!");
         if !temp_wordplace_root_node.children.is_empty() {
             workplace_view = workplace_view
-                .push(scrollable(operation::view_node(
+                .push(operation::view_node(
                     self.hovered_file_node_id.clone(),
                     self.selected_file_node_id,
                     &self.all_file_nodes,
                     self.temp_workplace_root_key,
                     0,
-                )))
+                ))
                 .spacing(SPACING);
         }
         if let Some(key) = self.workplace_root_key {
             workplace_view = workplace_view
-                .push(scrollable(operation::view_node(
+                .push(operation::view_node(
                     self.hovered_file_node_id.clone(),
                     self.selected_file_node_id,
                     &self.all_file_nodes,
                     key,
                     0,
-                )))
+                ))
                 .spacing(SPACING);
         }
-        workplace_view.into()
+        scrollable(workplace_view)
+            .direction(scrollable::Direction::Vertical(hidden_scroller))
+            .into()
     }
 }
