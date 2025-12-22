@@ -2,15 +2,20 @@ use std::{collections::HashMap, path::PathBuf};
 
 use crate::common::*;
 use iced::{
-    Alignment, Element, Length, Padding, Task, Theme,
+    Alignment, Background, Border, Element, Length, Padding, Task, Theme,
     border::Radius,
     mouse,
-    widget::{Grid, column, container, image, mouse_area, row, rule, scrollable, space, text},
+    overlay::menu,
+    widget::{
+        Grid, center, column, container, image, mouse_area, pick_list, row, rule, scrollable,
+        space, text,
+    },
 };
 use tracing::info;
 
 #[derive(Debug, Default)]
 pub struct ImageGallery {
+    selected_img: Option<String>,
     mode: ImageGalleryMode,
     images: HashMap<String, image::Handle>,
 }
@@ -26,6 +31,8 @@ enum ImageGalleryMode {
 pub enum ImageGalleryMessage {
     LoadImage(ImgData),
     ModeChange(ImageGalleryMode),
+    ChangeSelectedImg(String),
+    ShowImageGallery,
 }
 
 impl ImageGallery {
@@ -35,10 +42,16 @@ impl ImageGallery {
     ) -> Task<ImageGalleryMessage> {
         match image_gallery_message {
             ImageGalleryMessage::LoadImage(image_data) => {
+                self.selected_img = Some(image_data.name.clone());
                 self.images.entry(image_data.name).or_insert_with(|| {
                     info!("图片插入插入成功!");
                     image_data.handle
                 });
+                self.mode = ImageGalleryMode::ListView;
+                Task::done(ImageGalleryMessage::ShowImageGallery)
+            }
+            ImageGalleryMessage::ChangeSelectedImg(img_name) => {
+                self.selected_img = Some(img_name);
                 Task::none()
             }
             _ => Task::none(),
@@ -47,25 +60,81 @@ impl ImageGallery {
 
     pub fn view(&self) -> Element<'_, ImageGalleryMessage> {
         let hidden_scroller = scrollable::Scrollbar::new().scroller_width(0).width(0);
-        let mut grid = Grid::new()
-            .columns(2)
-            .spacing(SPACING_BIGGER)
-            .height(Length::Shrink);
-        for (name, handle) in &self.images {
-            let image = image(handle).content_fit(iced::ContentFit::Contain);
-            grid = grid.push(
-                column![
-                    text(name)
-                        .size(FONT_SIZE_SMALLER)
-                        .width(Length::Fill)
-                        .align_x(Alignment::Center),
-                    image
-                ]
-                .spacing(SPACING_SMALLER),
-            );
-        }
+        let (tool, content): (
+            Element<'_, ImageGalleryMessage>,
+            Element<'_, ImageGalleryMessage>,
+        ) = {
+            match self.mode {
+                ImageGalleryMode::GridView => {
+                    let mut grid = Grid::new()
+                        .columns(2)
+                        .spacing(SPACING_BIGGER)
+                        .height(Length::Shrink);
+                    for (name, handle) in &self.images {
+                        let image = image(handle).content_fit(iced::ContentFit::Contain);
+                        grid = grid.push(
+                            column![
+                                text(name)
+                                    .size(FONT_SIZE_SMALLER)
+                                    .width(Length::Fill)
+                                    .align_x(Alignment::Center),
+                                image
+                            ]
+                            .spacing(SPACING_SMALLER),
+                        );
+                    }
+
+                    (space().into(), grid.into())
+                }
+                ImageGalleryMode::ListView => {
+                    let content: Element<'_, ImageGalleryMessage> = if let Some(handle) =
+                        self.images.get(self.selected_img.as_ref().unwrap())
+                    {
+                        center(image(handle).content_fit(iced::ContentFit::Contain)).into()
+                    } else {
+                        space().into()
+                    };
+                    let pick_list = pick_list(
+                        self.images.keys().into_iter().collect::<Vec<_>>(),
+                        self.selected_img.as_ref(),
+                        |name| ImageGalleryMessage::ChangeSelectedImg(name.to_string()),
+                    )
+                    .text_size(FONT_SIZE_SMALLER)
+                    .text_line_height(1.)
+                    .style(|theme: &Theme, _| {
+                        let ex_palette = theme.extended_palette();
+                        let palette = theme.palette();
+                        pick_list::Style {
+                            text_color: palette.text,
+                            background: Background::Color(ex_palette.background.weaker.color),
+                            border: Border::default(),
+                            placeholder_color: palette.text,
+                            handle_color: palette.text,
+                        }
+                    })
+                    .menu_style(|theme: &Theme| {
+                        let ex_palette = theme.extended_palette();
+                        let palette = theme.palette();
+                        menu::Style {
+                            background: Background::Color(ex_palette.background.weaker.color),
+                            selected_background: Background::Color(
+                                ex_palette.background.base.color,
+                            ),
+                            selected_text_color: palette.text,
+                            text_color: palette.text,
+                            border: Border::default(),
+                            shadow: SHADOW_BASE,
+                        }
+                    });
+
+                    (pick_list.into(), content)
+                }
+            }
+        };
+
         container(column![
             row![
+                tool,
                 space::horizontal(),
                 mouse_area(text("恢复").size(FONT_SIZE_BIGGER))
                     .interaction(mouse::Interaction::Pointer),
@@ -86,9 +155,11 @@ impl ImageGallery {
                     fill_mode: rule::FillMode::Full,
                 }
             }),
-            container(scrollable(grid).direction(scrollable::Direction::Vertical(hidden_scroller)))
-                .height(Length::Fill)
-                .padding(Padding::from([PADDING_BASE, PADDING_BIGGER]))
+            container(
+                scrollable(content).direction(scrollable::Direction::Vertical(hidden_scroller))
+            )
+            .height(Length::Fill)
+            .padding(Padding::from([PADDING_BASE, PADDING_BIGGER]))
         ])
         .into()
     }

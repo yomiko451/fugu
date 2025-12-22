@@ -41,13 +41,10 @@ pub enum FilePanelMessage {
     SaveAs(FileData),
     ImportImg,
     ImportImgFolder,
-    
-    
     ChangeMode(Mode),
     ReturnSaveResult(Result<(), AppError>),
     SendFileDataToEditor(FileData),
-    SendImgPathToPreview(ImgData),
-    None,
+    SendImgDataToPreview(ImgData),
     FileTree(FileTreeMessage)
 }
 
@@ -79,7 +76,7 @@ impl FilePanel {
                         Task::done(FilePanelMessage::SendFileDataToEditor(file_data))
                     }
                     FileTreeMessage::SendImgDataToPreview(image_data) => {
-                        Task::done(FilePanelMessage::SendImgPathToPreview(image_data))
+                        Task::done(FilePanelMessage::SendImgDataToPreview(image_data))
                     }
                     _ => self.file_tree.update(file_tree_message, setting).map(FilePanelMessage::FileTree)
                 }

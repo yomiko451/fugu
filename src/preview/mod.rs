@@ -108,7 +108,10 @@ impl Preview {
             }
             PreviewMessage::ImageGallery(image_gallery_message) => {
                 match image_gallery_message {
-                    
+                    ImageGalleryMessage::ShowImageGallery => {
+                        self.current_page = PreviewPage::ImageGallery;
+                        Task::none()
+                    }
                     _ => self.image_gallery.update(image_gallery_message).map(PreviewMessage::ImageGallery)
                 }
             }

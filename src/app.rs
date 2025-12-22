@@ -71,7 +71,7 @@ impl App {
                     .editor
                     .update(EditorMessage::HandleSaveResult(operation_result), &self.setting)
                     .map(AppMessage::Editor),
-                FilePanelMessage::SendImgPathToPreview(image_data) => self
+                FilePanelMessage::SendImgDataToPreview(image_data) => self
                     .preview
                     .update(PreviewMessage::GetImgPathFromFilePanel(image_data), &self.setting)
                     .map(AppMessage::Preview),

@@ -27,8 +27,8 @@ pub struct FileNode {
     pub version: u64,
     pub file_name: String,
     pub path: Option<PathBuf>,
-    pub content_cache: Option<Arc<String>>,
-    pub image_handle: Option<image::Handle>,
+    pub string_cache: Option<Arc<String>>,
+    pub handle_cache: Option<image::Handle>,
     pub children: Vec<u32>,
 }
 
@@ -51,8 +51,8 @@ impl FileNode {
             },
             path: path,
             children: vec![],
-            content_cache: None,
-            image_handle: None
+            string_cache: None,
+            handle_cache: None
         }
     }
 }
@@ -106,19 +106,15 @@ pub async fn save_file_dialog(file_name: String) -> Option<PathBuf> {
         .map(|file_handle| file_handle.path().to_path_buf())
 }
 
-pub async fn read_file(path: PathBuf) -> Result<FileData, AppError> {
+pub async fn read_file(path: PathBuf) -> Result<String, AppError> {
     let content = tokio::fs::read_to_string(&path).await?;
-    let file_data = FileData {
-        version: 0,
-        content: Arc::new(content),
-    };
-    Ok(file_data)
+    Ok(content)
 }
 
-pub async fn get_img_handl(path: PathBuf) -> image::Handle {
-    tokio::task::spawn_blocking(|| {
-        image::Handle::from_path(path)
-    }).await.unwrap() // TODO 改成异步的
+pub async fn get_img_handle(path: PathBuf) -> Result<image::Handle, AppError> {
+    let bytes = tokio::fs::read(path).await?;
+    let handle = image::Handle::from_bytes(bytes);
+    Ok(handle)
 }
 
 pub async fn save_file(path: PathBuf, content: Arc<String>) -> Result<(), AppError> {
@@ -167,6 +163,13 @@ pub async fn load_file_tree(
     }
     Ok((root_node_key, file_tree))
 }
+
+// 异步读取图片并生成节点列表
+pub async fn get_img_handle_from_folder(path: PathBuf) -> Result<Vec<FileNode>, AppError> {
+    
+    // 之后遍历全部加入到all_nodes的字典中
+    Ok(vec![])
+} // 怎么设计？
 
 // 递归渲染节点树
 pub fn view_node(
@@ -244,8 +247,8 @@ pub fn view_node(
         }),
     )
     .interaction(mouse::Interaction::Pointer)
-    .on_press(FileTreeMessage::ChangeSelectedFileNode(node.id))
-    .on_enter(FileTreeMessage::ChangeHoveredFileNode(node.id));
+    .on_press(FileTreeMessage::ChangeSelectedNode(node.id))
+    .on_enter(FileTreeMessage::ChangeHoveredNode(node.id));
 
     match children_node_view {
         Some(children) => column![node_view, children],
