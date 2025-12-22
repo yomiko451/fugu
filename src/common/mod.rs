@@ -1,5 +1,5 @@
 use std::sync::{Arc, LazyLock};
-use iced::{theme::Palette, Color, Shadow, Theme, Vector};
+use iced::{Border, Color, Shadow, Theme, Vector, border::Radius, theme::Palette, widget::image};
 // 这里定义各种公共类型
 // FileData用于文件区和编辑区交互
 #[derive(Debug, Clone)]
@@ -7,6 +7,13 @@ pub struct FileData {
     pub version: u64,
     pub content: Arc<String>,
 }
+
+#[derive(Debug, Clone)]
+pub struct ImgData {
+    pub name: String,
+    pub handle: image::Handle,
+}
+
 // 包括各种App设定
 #[derive(Debug, Clone)]
 pub struct AppSetting {
@@ -66,9 +73,16 @@ pub const SPACING_BIGGER: u32 = 20;
 pub const SPACING: u32 = 10;
 pub const SPACING_SMALLER: u32 = 5;
 //默认边框弧度
-pub const BORDER_RADIUS: f32 = 5.;
-//默认边框宽度
-pub const BORDER_WIDTH: f32 = 1.;
+pub const DEFAULT_BORDER: Border = Border {
+    color: Color::TRANSPARENT,
+    width: 1.,
+    radius: Radius {
+        top_left: 5.,
+        top_right: 5.,
+        bottom_left: 5.,
+        bottom_right: 5.,
+    }
+};
 // 默认背景色
 const BACKGROUND_COLOR: Color = Color::from_rgb8(40, 44, 51);
 // 默认文本色
@@ -125,7 +139,8 @@ pub const MENU_WIDTH: f32 = 150.;
 pub const MENU_OFFSET: f32 = 5.;
 
 // 编辑区相关常量
-//pub const EDITOR_BG_COLOR: Color = Color::from_rgb8(40, 44, 51);
+pub const TABLE_DIALOG_HEIGHT: u32 = 150;
+pub const TABLE_DIALOG_WIDTH: u32 = 200;
 // 预览区相关常量
 //pub const PREVIEW_BG_COLOR: Color = Color::from_rgb8(47, 52, 62);
 

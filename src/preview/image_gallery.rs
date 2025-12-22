@@ -1,13 +1,13 @@
-use std::collections::HashMap;
-
-use iced::{
-    Alignment, Element, Length, Padding, Task, Theme, border::Radius, mouse, widget::{
-        Grid, column, container, image, mouse_area, row, rule,
-        scrollable, space, text,
-    }
-};
+use std::{collections::HashMap, path::PathBuf};
 
 use crate::common::*;
+use iced::{
+    Alignment, Element, Length, Padding, Task, Theme,
+    border::Radius,
+    mouse,
+    widget::{Grid, column, container, image, mouse_area, row, rule, scrollable, space, text},
+};
+use tracing::info;
 
 #[derive(Debug, Default)]
 pub struct ImageGallery {
@@ -24,7 +24,7 @@ enum ImageGalleryMode {
 
 #[derive(Debug, Clone)]
 pub enum ImageGalleryMessage {
-    LoadImage,
+    LoadImage(ImgData),
     ModeChange(ImageGalleryMode),
 }
 
@@ -34,6 +34,13 @@ impl ImageGallery {
         image_gallery_message: ImageGalleryMessage,
     ) -> Task<ImageGalleryMessage> {
         match image_gallery_message {
+            ImageGalleryMessage::LoadImage(image_data) => {
+                self.images.entry(image_data.name).or_insert_with(|| {
+                    info!("图片插入插入成功!");
+                    image_data.handle
+                });
+                Task::none()
+            }
             _ => Task::none(),
         }
     }
@@ -44,14 +51,18 @@ impl ImageGallery {
             .columns(2)
             .spacing(SPACING_BIGGER)
             .height(Length::Shrink);
-        let c = ["test.png", "test3.png", "test2.jpg"];
-        for i in 1..10 {
-            let image =
-                image(image::Handle::from_path(c[i % 3])).content_fit(iced::ContentFit::Contain);
-            grid = grid.push(column![
-                text("图片1sdfds").size(FONT_SIZE_SMALLER).width(Length::Fill).align_x(Alignment::Center),
-                image
-            ].spacing(SPACING_SMALLER));
+        for (name, handle) in &self.images {
+            let image = image(handle).content_fit(iced::ContentFit::Contain);
+            grid = grid.push(
+                column![
+                    text(name)
+                        .size(FONT_SIZE_SMALLER)
+                        .width(Length::Fill)
+                        .align_x(Alignment::Center),
+                    image
+                ]
+                .spacing(SPACING_SMALLER),
+            );
         }
         container(column![
             row![
@@ -75,8 +86,7 @@ impl ImageGallery {
                     fill_mode: rule::FillMode::Full,
                 }
             }),
-            container(scrollable(grid)
-                .direction(scrollable::Direction::Vertical(hidden_scroller)))
+            container(scrollable(grid).direction(scrollable::Direction::Vertical(hidden_scroller)))
                 .height(Length::Fill)
                 .padding(Padding::from([PADDING_BASE, PADDING_BIGGER]))
         ])

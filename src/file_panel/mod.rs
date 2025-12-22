@@ -1,6 +1,8 @@
+use std::path::PathBuf;
+
 use crate::{
     common::*,
-    file_panel::{file_tree::{FileTree, FileTreeMessage, SaveMode}, operation::FileNode},
+    file_panel::{file_tree::{FileTree, FileTreeMessage, SaveMode}, operation::{FileNode, NodeType}},
 };
 use iced::{
     Alignment,
@@ -31,15 +33,20 @@ pub enum Mode {
 
 #[derive(Debug, Clone)]
 pub enum FilePanelMessage {
-    OpenFolder,
+    OpenMdFolder,
     OpenFile,
     CreateNewFile,
     AutoSave(FileData),
     Save(FileData),
     SaveAs(FileData),
+    ImportImg,
+    ImportImgFolder,
+    
+    
     ChangeMode(Mode),
     ReturnSaveResult(Result<(), AppError>),
     SendFileDataToEditor(FileData),
+    SendImgPathToPreview(ImgData),
     None,
     FileTree(FileTreeMessage)
 }
@@ -71,62 +78,27 @@ impl FilePanel {
                     FileTreeMessage::SendFileDataToEditor(file_data) => {
                         Task::done(FilePanelMessage::SendFileDataToEditor(file_data))
                     }
+                    FileTreeMessage::SendImgDataToPreview(image_data) => {
+                        Task::done(FilePanelMessage::SendImgPathToPreview(image_data))
+                    }
                     _ => self.file_tree.update(file_tree_message, setting).map(FilePanelMessage::FileTree)
                 }
             }
-            FilePanelMessage::OpenFolder => {
-                Task::perform(operation::open_folder_dialog(),
-                    |path| {
-                        match path {
-                            Some(path) => {
-                                info!("获取文件路径成功!");
-                                FilePanelMessage::FileTree(FileTreeMessage::FetchFileTree(path))
-                            }
-                            None => {
-                                warn!("文件路径为空!");
-                                FilePanelMessage::None
-                            } // TODO
-                        }
-                    })
+            FilePanelMessage::OpenMdFolder => {
+                Task::done(FilePanelMessage::FileTree(FileTreeMessage::OpenFile(NodeType::DirectoryMd)))
             }
             FilePanelMessage::OpenFile => {
-                Task::perform(operation::open_file_dialog(), |path| match path {
-                        Some(path) => {
-                            let file_node = FileNode {
-                                is_dir: path.is_dir(),
-                                id: operation::get_next_id(),
-                                expanded: false,
-                                version: 0,
-                                file_name: path
-                                    .file_name()
-                                    .unwrap_or_default()
-                                    .to_string_lossy()
-                                    .into_owned(),
-                                path: Some(path),
-                                children: vec![],
-                                content_cache: None,
-                            };
-                            FilePanelMessage::FileTree(FileTreeMessage::InsertToTempWorkplace(file_node))
-                        }
-                        None => {
-                            warn!("文件路径为空!");
-                            FilePanelMessage::None
-                        }
-                    })
+                Task::done(FilePanelMessage::FileTree(FileTreeMessage::OpenFile(NodeType::Markdown)))
+            }
+            FilePanelMessage::ImportImg => {
+                Task::done(FilePanelMessage::FileTree(FileTreeMessage::OpenFile(NodeType::Image)))
+            }
+            FilePanelMessage::ImportImgFolder => {
+                Task::done(FilePanelMessage::FileTree(FileTreeMessage::OpenFile(NodeType::DirectoryImg)))
             }
             FilePanelMessage::CreateNewFile => {
-                let new_file_id = operation::get_next_id();
-                let new_file = FileNode {
-                    id: new_file_id,
-                    is_dir: false,
-                    children: vec![],
-                    content_cache: None,
-                    path: None,
-                    expanded: false,
-                    version: 0,
-                    file_name: "新建文件.md".to_string(),
-                };
-                Task::done(FilePanelMessage::FileTree(FileTreeMessage::InsertNewFile(new_file_id, new_file)))
+                let new_file = FileNode::new(None, NodeType::Markdown, Some("新建文件.md".to_string()));
+                Task::done(FilePanelMessage::FileTree(FileTreeMessage::InsertToFileTree(new_file)))
             }
             FilePanelMessage::AutoSave(file_data) => {
                 Task::done(FilePanelMessage::FileTree(FileTreeMessage::SaveFile(SaveMode::AutoSave, file_data)))
@@ -203,7 +175,7 @@ impl FilePanel {
                 .height(Length::Fill),
             container(
                 // 去除默认添加的临时工作区根节点所以要 -1
-                text!("文件节点数  {}", self.file_tree.all_file_nodes.len() - 1).size(FONT_SIZE_BASE),
+                text!("文件节点数  {}", self.file_tree.all_nodes.len() - 1).size(FONT_SIZE_BASE),
             )
             .padding(Padding::from([PADDING_SMALLER, PADDING_BIGGER]))
             .height(Length::Shrink)

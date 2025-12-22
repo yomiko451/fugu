@@ -11,7 +11,7 @@ use iced::{
     },
 };
 use jiff::civil::Weekday;
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 use tracing::info;
 mod image_gallery;
 mod operation;
@@ -35,6 +35,7 @@ pub struct Preview {
 #[derive(Debug, Clone)]
 pub enum PreviewMessage {
     SyncContnetWithEditor(Arc<String>),
+    GetImgPathFromFilePanel(ImgData),
     EditorAction(text_editor::Action),
     ChangePageTo(PreviewPage),
     ChangeSnapShot(String),
@@ -71,8 +72,11 @@ impl Preview {
         }
     }
 
-    pub fn update(&mut self, preview_message: PreviewMessage) -> Task<PreviewMessage> {
+    pub fn update(&mut self, preview_message: PreviewMessage, setting: &AppSetting) -> Task<PreviewMessage> {
         match preview_message {
+            PreviewMessage::GetImgPathFromFilePanel(image_data) => {
+                Task::done(PreviewMessage::ImageGallery(ImageGalleryMessage::LoadImage(image_data)))
+            }
             PreviewMessage::UpdateTimeStr => {
                 self.current_date_time = Preview::get_time_str();
                 Task::none()

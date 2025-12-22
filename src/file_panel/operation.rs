@@ -1,7 +1,7 @@
 use crate::{common::*, file_panel::file_tree::FileTreeMessage};
 use iced::{
     Background, Color, Length, Padding, Theme, mouse,
-    widget::{Column, Row, column, container, mouse_area, text},
+    widget::{Column, Row, column, container, image, mouse_area, text},
 };
 use std::{
     collections::HashMap,
@@ -14,7 +14,6 @@ use std::{
 use tokio::io::AsyncWriteExt;
 
 static FILE_NODE_COUNTER: AtomicU32 = AtomicU32::new(0);
-const EXTENSION_STR: [&str; 3] = ["md", "png", "jpg"];
 
 pub fn get_next_id() -> u32 {
     FILE_NODE_COUNTER.fetch_add(1, Ordering::Relaxed)
@@ -23,32 +22,78 @@ pub fn get_next_id() -> u32 {
 #[derive(Debug, Clone)]
 pub struct FileNode {
     pub id: u32,
-    pub is_dir: bool,
+    pub node_type: NodeType,
     pub expanded: bool,
     pub version: u64,
     pub file_name: String,
     pub path: Option<PathBuf>,
     pub content_cache: Option<Arc<String>>,
+    pub image_handle: Option<image::Handle>,
     pub children: Vec<u32>,
 }
 
-pub async fn open_file_dialog() -> Option<PathBuf> {
-    let path = rfd::AsyncFileDialog::new()
-        .set_title("打开文件")
-        .add_filter("markdown文件(*md)", &["md"])
-        .pick_file()
-        .await?;
-
-    Some(path.path().to_path_buf())
+impl FileNode {
+    pub fn new(path: Option<PathBuf>, node_type: NodeType, file_name: Option<String>) -> Self {
+        FileNode {
+            node_type,
+            id: get_next_id(),
+            expanded: false,
+            version: 0,
+            file_name: if let Some(file_name) = file_name {
+                file_name
+            } else {
+                path.as_ref()
+                    .expect("调用时必定是Some")
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned()
+            },
+            path: path,
+            children: vec![],
+            content_cache: None,
+            image_handle: None
+        }
+    }
 }
 
-pub async fn open_folder_dialog() -> Option<PathBuf> {
-    let path = rfd::AsyncFileDialog::new()
-        .set_title("打开文件夹")
-        .pick_folder()
-        .await?;
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum NodeType {
+    DirectoryMd,
+    DirectoryImg,
+    Markdown,
+    Image,
+}
 
-    Some(path.path().to_path_buf())
+pub async fn open_file(node_type: NodeType) -> Option<FileNode> {
+    let path = match node_type {
+        NodeType::Markdown => {
+            rfd::AsyncFileDialog::new()
+                .set_title("打开文件")
+                .add_filter("markdown文件(*md)", &["md"])
+                .pick_file()
+                .await?
+        }
+        NodeType::Image => {
+            rfd::AsyncFileDialog::new()
+                .set_title("打开文件")
+                .add_filter("图片文件(*jpg,*png)", &["jpg", "png"])
+                .pick_file()
+                .await?
+        }
+        _ => {
+            rfd::AsyncFileDialog::new()
+                .set_title("打开文件夹")
+                .pick_folder()
+                .await?
+        }
+    };
+
+    Some(FileNode::new(
+        Some(path.path().to_path_buf()),
+        node_type,
+        None,
+    ))
 }
 
 pub async fn save_file_dialog(file_name: String) -> Option<PathBuf> {
@@ -58,7 +103,7 @@ pub async fn save_file_dialog(file_name: String) -> Option<PathBuf> {
         .set_title("保存文件")
         .save_file()
         .await
-    .map(|file_handle| file_handle.path().to_path_buf())
+        .map(|file_handle| file_handle.path().to_path_buf())
 }
 
 pub async fn read_file(path: PathBuf) -> Result<FileData, AppError> {
@@ -70,33 +115,25 @@ pub async fn read_file(path: PathBuf) -> Result<FileData, AppError> {
     Ok(file_data)
 }
 
+pub async fn get_img_handl(path: PathBuf) -> image::Handle {
+    tokio::task::spawn_blocking(|| {
+        image::Handle::from_path(path)
+    }).await.unwrap() // TODO 改成异步的
+}
+
 pub async fn save_file(path: PathBuf, content: Arc<String>) -> Result<(), AppError> {
     let mut file = tokio::fs::File::create(path).await?;
     file.write_all(content.as_bytes()).await?;
     Ok(())
 }
 
-// #[derive(Debug, Clone)]
-// pub struct FileTree(pub Vec<FileNode>);
-
 // 异步读取文件并生成节点树
-pub async fn load_file_tree(path: PathBuf) -> Result<(u32, HashMap<u32, FileNode>), AppError> {
+pub async fn load_file_tree(
+    mut root_node: FileNode,
+) -> Result<(u32, HashMap<u32, FileNode>), AppError> {
     let mut file_tree = HashMap::new();
-    let root_file_node_key = get_next_id();
-    let root_node = FileNode {
-        is_dir: path.is_dir(),
-        id: root_file_node_key,
-        expanded: true,
-        version: 0,
-        path: Some(path.to_path_buf()),
-        file_name: path
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .into_owned(),
-        children: vec![],
-        content_cache: None,
-    };
+    root_node.expanded = true;
+    let root_node_key = root_node.id;
 
     let mut node_index_stack = vec![(root_node.path.as_ref().unwrap().clone(), root_node.id)];
     file_tree.insert(root_node.id, root_node);
@@ -108,23 +145,9 @@ pub async fn load_file_tree(path: PathBuf) -> Result<(u32, HashMap<u32, FileNode
             let path = entry.path();
             if !path.is_dir() {
                 if let Some(extension) = path.extension()
-                    && EXTENSION_STR.contains(&extension.to_string_lossy().as_ref())
+                    && extension.to_string_lossy().as_ref() == "md"
                 {
-                    let child_file_node = FileNode {
-                        is_dir: path.is_dir(),
-                        id: get_next_id(),
-                        expanded: false,
-                        version: 0,
-                        path: Some(path.clone()),
-                        file_name: path
-                            .file_name()
-                            .unwrap_or_default()
-                            .to_string_lossy()
-                            .into_owned(),
-                        children: vec![],
-                        content_cache: None,
-                    };
-
+                    let child_file_node = FileNode::new(Some(path), NodeType::Markdown, None);
                     if let Some(file_node) = file_tree.get_mut(&key) {
                         file_node.children.push(child_file_node.id);
                     }
@@ -133,20 +156,7 @@ pub async fn load_file_tree(path: PathBuf) -> Result<(u32, HashMap<u32, FileNode
                     continue;
                 }
             } else {
-                let child_file_node = FileNode {
-                    is_dir: path.is_dir(),
-                    id: get_next_id(),
-                    expanded: false,
-                    version: 0,
-                    path: Some(path.clone()),
-                    file_name: path
-                        .file_name()
-                        .unwrap_or_default()
-                        .to_string_lossy()
-                        .into_owned(),
-                    children: vec![],
-                    content_cache: None,
-                };
+                let child_file_node = FileNode::new(Some(path.clone()), NodeType::DirectoryMd, None);
                 node_index_stack.push((path, child_file_node.id));
                 if let Some(file_node) = file_tree.get_mut(&key) {
                     file_node.children.push(child_file_node.id);
@@ -155,8 +165,7 @@ pub async fn load_file_tree(path: PathBuf) -> Result<(u32, HashMap<u32, FileNode
             }
         }
     }
-
-    Ok((root_file_node_key, file_tree))
+    Ok((root_node_key, file_tree))
 }
 
 // 递归渲染节点树
@@ -191,7 +200,7 @@ pub fn view_node(
         }
         Some(column)
     } else {
-        if node.is_dir {
+        if node.node_type == NodeType::DirectoryMd {
             row = row.push(text(" ▷ ").size(FONT_SIZE_SMALLER));
         }
         if node.path.is_none() {

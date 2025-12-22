@@ -22,6 +22,8 @@ pub enum MenuBarMessage {
     CommandCreateNewFile,
     CommandSaveFile,
     CommandSaveAs,
+    CommandImportImg,
+    CommandImportImgFolder,
     SettingAutoSave(bool)
 }
 
@@ -61,6 +63,8 @@ impl MenuBar {
                 ("保存文件", MenuBarMessage::CommandSaveFile, None),
                 ("打开文件夹", MenuBarMessage::CommandOpenFolder, None),
                 ("文件另存为", MenuBarMessage::CommandSaveAs, None),
+                ("导入图片", MenuBarMessage::CommandImportImg, None),
+                ("导入图片文件夹", MenuBarMessage::CommandImportImgFolder, None),
             ],
         );
 
@@ -170,8 +174,7 @@ impl MenuBar {
                     };
                     style.border(Border {
                         color: ex_palette.background.weakest.color,
-                        width: BORDER_WIDTH,
-                        radius: Radius::new(BORDER_RADIUS),
+                        ..DEFAULT_BORDER
                     })
                 }),
         )

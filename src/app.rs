@@ -71,6 +71,10 @@ impl App {
                     .editor
                     .update(EditorMessage::HandleSaveResult(operation_result), &self.setting)
                     .map(AppMessage::Editor),
+                FilePanelMessage::SendImgPathToPreview(image_data) => self
+                    .preview
+                    .update(PreviewMessage::GetImgPathFromFilePanel(image_data), &self.setting)
+                    .map(AppMessage::Preview),
                 _ => self
                     .file_panel
                     .update(file_panel_message, &self.setting)
@@ -79,11 +83,19 @@ impl App {
             AppMessage::MenuBar(menu_bar_message) => match menu_bar_message {
                 MenuBarMessage::CommandOpenFolder => self
                     .file_panel
-                    .update(FilePanelMessage::OpenFolder, &self.setting)
+                    .update(FilePanelMessage::OpenMdFolder, &self.setting)
                     .map(AppMessage::FilePanel),
                 MenuBarMessage::CommandOpenFile => self
                     .file_panel
                     .update(FilePanelMessage::OpenFile, &self.setting)
+                    .map(AppMessage::FilePanel),
+                MenuBarMessage::CommandImportImg => self
+                    .file_panel
+                    .update(FilePanelMessage::ImportImg, &self.setting)
+                    .map(AppMessage::FilePanel),
+                MenuBarMessage::CommandImportImgFolder => self
+                    .file_panel
+                    .update(FilePanelMessage::ImportImgFolder, &self.setting)
                     .map(AppMessage::FilePanel),
                 MenuBarMessage::CommandCreateNewFile => self
                     .file_panel
@@ -109,7 +121,7 @@ impl App {
             AppMessage::Editor(editor_message) => match editor_message {
                 EditorMessage::SendNewContentToPreview(new_content) => self
                     .preview
-                    .update(PreviewMessage::SyncContnetWithEditor(new_content))
+                    .update(PreviewMessage::SyncContnetWithEditor(new_content), &self.setting)
                     .map(AppMessage::Preview),
                 EditorMessage::AutoSaveToFile(file_data) => self
                     .file_panel
@@ -128,7 +140,7 @@ impl App {
             AppMessage::Preview(preview_message) => match preview_message {
                 _ => self
                     .preview
-                    .update(preview_message)
+                    .update(preview_message, &self.setting)
                     .map(AppMessage::Preview),
             },
             _ => Task::none(),
