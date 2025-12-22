@@ -63,7 +63,7 @@ impl App {
     pub fn update(&mut self, app_message: AppMessage) -> Task<AppMessage> {
         match app_message {
             AppMessage::FilePanel(file_panel_message) => match file_panel_message {
-                FilePanelMessage::SendSelectedFileDataToEditor(file_data) => self
+                FilePanelMessage::SendFileDataToEditor(file_data) => self
                     .editor
                     .update(EditorMessage::LoadFileDataFromFilePanel(file_data), &self.setting)
                     .map(AppMessage::Editor),
@@ -79,15 +79,15 @@ impl App {
             AppMessage::MenuBar(menu_bar_message) => match menu_bar_message {
                 MenuBarMessage::CommandOpenFolder => self
                     .file_panel
-                    .update(FilePanelMessage::OperationOpenFolder, &self.setting)
+                    .update(FilePanelMessage::OpenFolder, &self.setting)
                     .map(AppMessage::FilePanel),
                 MenuBarMessage::CommandOpenFile => self
                     .file_panel
-                    .update(FilePanelMessage::OperationOpenFile, &self.setting)
+                    .update(FilePanelMessage::OpenFile, &self.setting)
                     .map(AppMessage::FilePanel),
                 MenuBarMessage::CommandCreateNewFile => self
                     .file_panel
-                    .update(FilePanelMessage::OperationCreateNewFile, &self.setting)
+                    .update(FilePanelMessage::CreateNewFile, &self.setting)
                     .map(AppMessage::FilePanel),
                 MenuBarMessage::CommandSaveFile=> self
                     .editor
@@ -113,15 +113,15 @@ impl App {
                     .map(AppMessage::Preview),
                 EditorMessage::AutoSaveToFile(file_data) => self
                     .file_panel
-                    .update(FilePanelMessage::OperationAutoSave(file_data), &self.setting)
+                    .update(FilePanelMessage::AutoSave(file_data), &self.setting)
                     .map(AppMessage::FilePanel),
                 EditorMessage::FileSaveAs(file_data) => self
                     .file_panel
-                    .update(FilePanelMessage::OperationSaveAs(file_data), &self.setting)
+                    .update(FilePanelMessage::SaveAs(file_data), &self.setting)
                     .map(AppMessage::FilePanel),
                 EditorMessage::SaveToFile(file_data) => self
                     .file_panel
-                    .update(FilePanelMessage::OperationSaveFile(file_data), &self.setting)
+                    .update(FilePanelMessage::Save(file_data), &self.setting)
                     .map(AppMessage::FilePanel),
                 _ => self.editor.update(editor_message, &self.setting).map(AppMessage::Editor),
             },

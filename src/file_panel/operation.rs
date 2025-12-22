@@ -1,11 +1,11 @@
-use crate::{app::App, common::*, file_panel::FilePanelMessage};
+use crate::{common::*, file_panel::file_tree::FileTreeMessage};
 use iced::{
     Background, Color, Length, Padding, Theme, mouse,
     widget::{Column, Row, column, container, mouse_area, text},
 };
 use std::{
     collections::HashMap,
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{
         Arc,
         atomic::{AtomicU32, Ordering},
@@ -166,7 +166,7 @@ pub fn view_node(
     all_file_nodes: &HashMap<u32, FileNode>,
     key: u32,
     depth: u16,
-) -> Column<'_, FilePanelMessage> {
+) -> Column<'_, FileTreeMessage> {
     let node = all_file_nodes.get(&key).unwrap();
     let mut row = Row::new();
 
@@ -235,8 +235,8 @@ pub fn view_node(
         }),
     )
     .interaction(mouse::Interaction::Pointer)
-    .on_press(FilePanelMessage::ChangeSelectedFileNode(node.id))
-    .on_enter(FilePanelMessage::ChangeHoveredFileNode(node.id));
+    .on_press(FileTreeMessage::ChangeSelectedFileNode(node.id))
+    .on_enter(FileTreeMessage::ChangeHoveredFileNode(node.id));
 
     match children_node_view {
         Some(children) => column![node_view, children],

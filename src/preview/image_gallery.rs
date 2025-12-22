@@ -2,11 +2,10 @@ use std::collections::HashMap;
 
 use iced::{
     Alignment, Element, Length, Padding, Task, Theme, border::Radius, mouse, widget::{
-        Column, Grid, center, center_x, column, container, grid, image, mouse_area, row, rule,
+        Grid, column, container, image, mouse_area, row, rule,
         scrollable, space, text,
     }
 };
-use tracing::instrument::WithSubscriber;
 
 use crate::common::*;
 
@@ -19,8 +18,8 @@ pub struct ImageGallery {
 #[derive(Debug, Clone, Copy, Default)]
 enum ImageGalleryMode {
     #[default]
-    ListView,
     GridView,
+    ListView,
 }
 
 #[derive(Debug, Clone)]
@@ -45,9 +44,6 @@ impl ImageGallery {
             .columns(2)
             .spacing(SPACING_BIGGER)
             .height(Length::Shrink);
-        // let mut column = Column::new()
-        //     .spacing(SPACING)
-        //     .padding(Padding::from([PADDING_BASE, PADDING_BIGGER]));
         let c = ["test.png", "test3.png", "test2.jpg"];
         for i in 1..10 {
             let image =
