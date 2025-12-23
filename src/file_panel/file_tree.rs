@@ -240,7 +240,7 @@ impl FileTree {
                     {
                         *file_path = Some(path)
                     }
-                    return Task::done(FileTreeMessage::SaveFile(SaveMode::ManualSave, file_data));
+                    Task::done(FileTreeMessage::SaveFile(SaveMode::ManualSave, file_data))
                 })
                 .unwrap_or(Task::none()),
             FileTreeMessage::SaveFile(save_mode, file_data) => self
@@ -340,56 +340,60 @@ impl FileTree {
     }
 
     pub fn insert_node_to_temp_workplace(&mut self, ids: Vec<u32>) {
-        if let Some(key) = self.temp_workplace_root_key {
-            self.all_nodes.get_mut(&key).map(|root_node| {
-                root_node
-                    .try_get_children_mut()
-                    .map(|children| {
-                        for id in ids {
-                            children.push(id)
-                        }
-                    })
-                    .ok()
-            });
-        } else {
-            let temp_workplace_root_node = FileNode::new(
-                "临时工作区".to_string(),
-                NodeContent::DirectoryTemp(TempDir {
-                    children: ids,
-                    expanded: true,
-                }),
-            );
-            let temp_workplace_id = temp_workplace_root_node.id;
-            self.all_nodes
-                .insert(temp_workplace_id, temp_workplace_root_node);
-            self.temp_workplace_root_key = Some(temp_workplace_id);
+        match self.temp_workplace_root_key {
+            Some(key) => {
+                if let Some(children) = self
+                    .all_nodes
+                    .get_mut(&key)
+                    .and_then(|root_node| root_node.try_get_children_mut().ok())
+                {
+                    for id in ids {
+                        children.push(id)
+                    }
+                }
+            }
+            None => {
+                let temp_workplace_root_node = FileNode::new(
+                    "临时工作区".to_string(),
+                    NodeContent::DirectoryTemp(TempDir {
+                        children: ids,
+                        expanded: true,
+                    }),
+                );
+                let temp_workplace_id = temp_workplace_root_node.id;
+                self.all_nodes
+                    .insert(temp_workplace_id, temp_workplace_root_node);
+                self.temp_workplace_root_key = Some(temp_workplace_id);
+            }
         }
     }
 
     pub fn insert_node_to_temp_img_library(&mut self, ids: Vec<u32>) {
-        if let Some(key) = self.temp_img_library_root_key {
-            self.all_nodes.get_mut(&key).map(|root_node| {
-                root_node
-                    .try_get_children_mut()
-                    .map(|children| {
-                        for id in ids {
-                            children.push(id)
-                        }
-                    })
-                    .ok()
-            });
-        } else {
-            let temp_img_library_root_node = FileNode::new(
-                "临时图片库".to_string(),
-                NodeContent::DirectoryTemp(TempDir {
-                    children: ids,
-                    expanded: true,
-                }),
-            );
-            let temp_img_library_id = temp_img_library_root_node.id;
-            self.all_nodes
-                .insert(temp_img_library_id, temp_img_library_root_node);
-            self.temp_img_library_root_key = Some(temp_img_library_id);
+        match self.temp_img_library_root_key {
+            Some(key) => {
+                if let Some(children) = self
+                    .all_nodes
+                    .get_mut(&key)
+                    .and_then(|root_node| root_node.try_get_children_mut().ok())
+                {
+                    for id in ids {
+                        children.push(id)
+                    }
+                }
+            }
+            None => {
+                let temp_img_library_root_node = FileNode::new(
+                    "临时图片库".to_string(),
+                    NodeContent::DirectoryTemp(TempDir {
+                        children: ids,
+                        expanded: true,
+                    }),
+                );
+                let temp_img_library_id = temp_img_library_root_node.id;
+                self.all_nodes
+                    .insert(temp_img_library_id, temp_img_library_root_node);
+                self.temp_img_library_root_key = Some(temp_img_library_id);
+            }
         }
     }
 }
