@@ -15,7 +15,7 @@ use tracing::info;
 
 #[derive(Debug, Default)]
 pub struct ImageGallery {
-    selected_img: Option<String>,
+    selected_img_name: Option<String>,
     mode: ImageGalleryMode,
     images: HashMap<String, image::Handle>,
 }
@@ -29,7 +29,7 @@ enum ImageGalleryMode {
 
 #[derive(Debug, Clone)]
 pub enum ImageGalleryMessage {
-    LoadImage(ImgData),
+    LoadImage(Vec<ImgData>),
     ModeChange(ImageGalleryMode),
     ChangeSelectedImg(String),
     ShowImageGallery,
@@ -42,16 +42,31 @@ impl ImageGallery {
     ) -> Task<ImageGalleryMessage> {
         match image_gallery_message {
             ImageGalleryMessage::LoadImage(image_data) => {
-                self.selected_img = Some(image_data.name.clone());
-                self.images.entry(image_data.name).or_insert_with(|| {
-                    info!("图片插入插入成功!");
-                    image_data.handle
-                });
-                self.mode = ImageGalleryMode::ListView;
-                Task::done(ImageGalleryMessage::ShowImageGallery)
+                let image_count = image_data.len();
+                if image_count == 1 {
+                    let image = image_data.into_iter().next().expect("必定有一个元素不应当出错!");
+                    self.selected_img_name = Some(image.name.clone());
+                    self.images.entry(image.name).or_insert_with(|| {
+                        info!("图片插入插入成功!");
+                        image.handle
+                    });
+                    self.mode = ImageGalleryMode::ListView;
+                    return Task::done(ImageGalleryMessage::ShowImageGallery);
+                } else if image_count > 1 {
+                    for image in image_data {
+                        self.images.entry(image.name).or_insert_with(|| {
+                            info!("图片插入插入成功!");
+                            image.handle
+                        });
+                    }
+                    self.mode = ImageGalleryMode::GridView;
+                    return Task::done(ImageGalleryMessage::ShowImageGallery);
+                }
+                Task::none()
+                
             }
             ImageGalleryMessage::ChangeSelectedImg(img_name) => {
-                self.selected_img = Some(img_name);
+                self.selected_img_name = Some(img_name);
                 Task::none()
             }
             _ => Task::none(),
@@ -88,15 +103,17 @@ impl ImageGallery {
                 }
                 ImageGalleryMode::ListView => {
                     let content: Element<'_, ImageGalleryMessage> = if let Some(handle) =
-                        self.images.get(self.selected_img.as_ref().unwrap())
+                        self.images.get(self.selected_img_name.as_ref().unwrap())
                     {
                         center(image(handle).content_fit(iced::ContentFit::Contain)).into()
                     } else {
                         space().into()
                     };
+                    let mut options = self.images.keys().into_iter().collect::<Vec<_>>();
+                    options.sort();
                     let pick_list = pick_list(
-                        self.images.keys().into_iter().collect::<Vec<_>>(),
-                        self.selected_img.as_ref(),
+                        options,
+                        self.selected_img_name.as_ref(),
                         |name| ImageGalleryMessage::ChangeSelectedImg(name.to_string()),
                     )
                     .text_size(FONT_SIZE_SMALLER)

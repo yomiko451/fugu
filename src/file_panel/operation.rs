@@ -5,7 +5,7 @@ use iced::{
 };
 use std::{
     collections::HashMap,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{
         Arc,
         atomic::{AtomicU32, Ordering},
@@ -14,86 +14,280 @@ use std::{
 use tokio::io::AsyncWriteExt;
 
 static FILE_NODE_COUNTER: AtomicU32 = AtomicU32::new(0);
+static IMG_NAME_COUNTER: AtomicU32 = AtomicU32::new(1);
 
 pub fn get_next_id() -> u32 {
     FILE_NODE_COUNTER.fetch_add(1, Ordering::Relaxed)
 }
 
+pub fn get_next_img_id() -> u32 {
+    IMG_NAME_COUNTER.fetch_add(1, Ordering::Relaxed)
+}
+
+pub fn get_file_name(path: &Path) -> String {
+    match path.file_name() {
+        Some(name) => name.to_string_lossy().into_owned(),
+        None => "暂无名称".to_string(),
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct FileNode {
     pub id: u32,
-    pub node_type: NodeType,
-    pub expanded: bool,
-    pub version: u64,
-    pub file_name: String,
-    pub path: Option<PathBuf>,
-    pub string_cache: Option<Arc<String>>,
-    pub handle_cache: Option<image::Handle>,
-    pub children: Vec<u32>,
+    pub name: String,
+    pub node_content: NodeContent,
 }
 
 impl FileNode {
-    pub fn new(path: Option<PathBuf>, node_type: NodeType, file_name: Option<String>) -> Self {
+    pub fn new(name: String, node_content: NodeContent) -> Self {
         FileNode {
-            node_type,
             id: get_next_id(),
-            expanded: false,
-            version: 0,
-            file_name: if let Some(file_name) = file_name {
-                file_name
-            } else {
-                path.as_ref()
-                    .expect("调用时必定是Some")
-                    .file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .into_owned()
+            name,
+            node_content,
+        }
+    }
+
+    pub fn try_get_children_mut(&mut self) -> Result<&mut Vec<u32>, AppError> {
+        match self {
+            FileNode {
+                node_content: NodeContent::DirectoryMd(Dir { children, .. }),
+                ..
+            } => Ok(children),
+            FileNode {
+                node_content: NodeContent::DirectoryTemp(TempDir { children, .. }),
+                ..
+            } => Ok(children),
+            _ => Err(AppError::FilePanelError(
+                "该节点不是文件夹类型!".to_string(),
+            )),
+        }
+    }
+
+    pub fn try_get_children(&self) -> Result<&Vec<u32>, AppError> {
+        match self {
+            FileNode {
+                node_content: NodeContent::DirectoryMd(Dir { children, .. }),
+                ..
+            } => Ok(children),
+            FileNode {
+                node_content: NodeContent::DirectoryTemp(TempDir { children, .. }),
+                ..
+            } => Ok(children),
+            _ => Err(AppError::FilePanelError("该节点不是文件夹!".to_string())),
+        }
+    }
+    
+    pub fn is_children_empty(&self) -> bool {
+        match self {
+            FileNode {
+                node_content: NodeContent::DirectoryMd(Dir {children,..}),
+                ..
+            } => {
+                children.is_empty()
+            }
+            FileNode {
+                node_content: NodeContent::DirectoryTemp(TempDir {children,..}),
+                ..
+            } => {
+                children.is_empty()
+            }
+            _ => true
+        }
+    }
+    
+    pub fn try_get_img(&self) -> Result<&ImageFile, AppError> {
+        match self {
+            FileNode {
+                node_content: NodeContent::Image(image),
+                ..
+            } => Ok(image),
+            _ => Err(AppError::FilePanelError("该节点不是图片!".to_string())),
+        }
+    }
+
+    pub fn try_get_md(&self) -> Result<&MdFile, AppError> {
+        match self {
+            FileNode {
+                node_content: NodeContent::Markdown(md_file),
+                ..
+            } => Ok(md_file),
+            _ => Err(AppError::FilePanelError("该节点不是md文件!".to_string())),
+        }
+    }
+
+    pub fn try_get_md_mut(&mut self) -> Result<&mut MdFile, AppError> {
+        match self {
+            FileNode {
+                node_content: NodeContent::Markdown(md_file),
+                ..
+            } => Ok(md_file),
+            _ => Err(AppError::FilePanelError("该节点不是md文件!".to_string())),
+        }
+    }
+
+    pub fn try_get_path(&self) -> Result<&Path, AppError> {
+        match self {
+            FileNode {
+                node_content: NodeContent::Image(ImageFile { path, .. }),
+                ..
+            } => Ok(path),
+            FileNode {
+                node_content: NodeContent::DirectoryMd(Dir { path, .. }),
+                ..
+            } => Ok(path),
+            FileNode {
+                node_content: NodeContent::Markdown(MdFile { path, .. }),
+                ..
+            } => match path {
+                Some(path) => Ok(path),
+                None => Err(AppError::FilePanelError("路径为空!".to_string())),
             },
-            path: path,
-            children: vec![],
-            string_cache: None,
-            handle_cache: None
+            _ => Err(AppError::FilePanelError("临时节点无路径!".to_string())),
+        }
+    }
+
+    pub fn is_expanded(&self) -> bool {
+        match self {
+            FileNode {
+                node_content: NodeContent::DirectoryMd(Dir { expanded, .. }),
+                ..
+            } => *expanded,
+            FileNode {
+                node_content: NodeContent::DirectoryTemp(TempDir { expanded, .. }),
+                ..
+            } => *expanded,
+            _ => false,
+        }
+    }
+
+    pub fn reverse_expanded_if_node_is_directory(&mut self) {
+        match self {
+            FileNode {
+                node_content: NodeContent::DirectoryMd(Dir { expanded, .. }),
+                ..
+            } => *expanded = !*expanded,
+            FileNode {
+                node_content: NodeContent::DirectoryTemp(TempDir { expanded, .. }),
+                ..
+            } => *expanded = !*expanded,
+            _ => {}
+        }
+    }
+
+    pub fn is_directory(&self) -> bool {
+        match self {
+            FileNode {
+                node_content: NodeContent::DirectoryMd { .. },
+                ..
+            } => true,
+            FileNode {
+                node_content: NodeContent::DirectoryTemp { .. },
+                ..
+            } => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_temp_file(&self) -> bool {
+        match self {
+            FileNode {
+                node_content: NodeContent::Markdown(MdFile { path, .. }),
+                ..
+            } => path.is_none(),
+            _ => false,
+        }
+    }
+
+    pub fn is_md_file(&self) -> bool {
+        match self {
+            FileNode {
+                node_content: NodeContent::Markdown { .. },
+                ..
+            } => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_img_file(&self) -> bool {
+        match self {
+            FileNode {
+                node_content: NodeContent::Image { .. },
+                ..
+            } => true,
+            _ => false,
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum NodeType {
-    DirectoryMd,
-    DirectoryImg,
-    Markdown,
-    Image,
+#[derive(Debug, Clone, PartialEq)]
+pub struct Dir {
+    pub path: PathBuf,
+    pub children: Vec<u32>,
+    pub expanded: bool,
 }
 
-pub async fn open_file(node_type: NodeType) -> Option<FileNode> {
-    let path = match node_type {
-        NodeType::Markdown => {
-            rfd::AsyncFileDialog::new()
-                .set_title("打开文件")
-                .add_filter("markdown文件(*md)", &["md"])
-                .pick_file()
-                .await?
-        }
-        NodeType::Image => {
-            rfd::AsyncFileDialog::new()
-                .set_title("打开文件")
-                .add_filter("图片文件(*jpg,*png)", &["jpg", "png"])
-                .pick_file()
-                .await?
-        }
-        _ => {
-            rfd::AsyncFileDialog::new()
-                .set_title("打开文件夹")
-                .pick_folder()
-                .await?
-        }
-    };
+#[derive(Debug, Clone, PartialEq)]
+pub struct TempDir {
+    pub children: Vec<u32>,
+    pub expanded: bool,
+}
+#[derive(Debug, Clone, PartialEq)]
+pub struct MdFile {
+    pub path: Option<PathBuf>,
+    pub version: u64,
+    pub cache: Option<Arc<String>>,
+}
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImageFile {
+    pub path: PathBuf,
+    pub name: String,
+    pub cache: image::Handle,
+}
 
-    Some(FileNode::new(
-        Some(path.path().to_path_buf()),
-        node_type,
-        None,
-    ))
+#[derive(Debug, Clone, PartialEq)]
+pub enum NodeContent {
+    DirectoryMd(Dir),
+    DirectoryTemp(TempDir),
+    Markdown(MdFile),
+    Image(ImageFile),
+}
+
+pub async fn open_md_file_dialog() -> Option<PathBuf> {
+    let path = rfd::AsyncFileDialog::new()
+        .set_title("打开文件")
+        .add_filter("markdown文件(*md)", &["md"])
+        .pick_file()
+        .await?;
+
+    Some(path.path().to_path_buf())
+}
+
+pub async fn open_img_file_dialog() -> Option<PathBuf> {
+    let path = rfd::AsyncFileDialog::new()
+        .set_title("打开文件")
+        .add_filter("图片文件(*jpg,*png)", &["jpg", "png"])
+        .pick_file()
+        .await?;
+
+    Some(path.path().to_path_buf())
+}
+
+pub async fn open_folder_dialog() -> Option<PathBuf> {
+    let path = rfd::AsyncFileDialog::new()
+        .set_title("打开文件夹")
+        .pick_folder()
+        .await?;
+
+    Some(path.path().to_path_buf())
+}
+
+pub async fn open_img_folder_dialog() -> Option<PathBuf> {
+    let path = rfd::AsyncFileDialog::new()
+        .set_title("导入图片文件夹")
+        .pick_folder()
+        .await?;
+
+    Some(path.path().to_path_buf())
 }
 
 pub async fn save_file_dialog(file_name: String) -> Option<PathBuf> {
@@ -106,15 +300,15 @@ pub async fn save_file_dialog(file_name: String) -> Option<PathBuf> {
         .map(|file_handle| file_handle.path().to_path_buf())
 }
 
-pub async fn read_file(path: PathBuf) -> Result<String, AppError> {
+pub async fn read_file(path: PathBuf) -> Result<(PathBuf, String), AppError> {
     let content = tokio::fs::read_to_string(&path).await?;
-    Ok(content)
+    Ok((path, content))
 }
 
-pub async fn get_img_handle(path: PathBuf) -> Result<image::Handle, AppError> {
-    let bytes = tokio::fs::read(path).await?;
+pub async fn read_img_file(path: PathBuf) -> Result<(PathBuf, image::Handle), AppError> {
+    let bytes = tokio::fs::read(&path).await?;
     let handle = image::Handle::from_bytes(bytes);
-    Ok(handle)
+    Ok((path, handle))
 }
 
 pub async fn save_file(path: PathBuf, content: Arc<String>) -> Result<(), AppError> {
@@ -124,15 +318,20 @@ pub async fn save_file(path: PathBuf, content: Arc<String>) -> Result<(), AppErr
 }
 
 // 异步读取文件并生成节点树
-pub async fn load_file_tree(
-    mut root_node: FileNode,
+pub async fn fetch_file_tree(
+    root_path: PathBuf,
 ) -> Result<(u32, HashMap<u32, FileNode>), AppError> {
-    let mut file_tree = HashMap::new();
-    root_node.expanded = true;
+    let mut all_nodes = HashMap::new();
+    let root_node_name = get_file_name(&root_path);
+    let root_node_content = NodeContent::DirectoryMd(Dir {
+        path: root_path.clone(),
+        children: vec![],
+        expanded: true,
+    });
+    let root_node = FileNode::new(root_node_name, root_node_content);
     let root_node_key = root_node.id;
-
-    let mut node_index_stack = vec![(root_node.path.as_ref().unwrap().clone(), root_node.id)];
-    file_tree.insert(root_node.id, root_node);
+    let mut node_index_stack = vec![(root_path, root_node.id)];
+    all_nodes.insert(root_node.id, root_node);
 
     while let Some((path, key)) = node_index_stack.pop() {
         let mut dir = tokio::fs::read_dir(path).await?;
@@ -143,33 +342,73 @@ pub async fn load_file_tree(
                 if let Some(extension) = path.extension()
                     && extension.to_string_lossy().as_ref() == "md"
                 {
-                    let child_file_node = FileNode::new(Some(path), NodeType::Markdown, None);
-                    if let Some(file_node) = file_tree.get_mut(&key) {
-                        file_node.children.push(child_file_node.id);
+                    let child_node_name = get_file_name(&path);
+                    let child_node_content = NodeContent::Markdown(MdFile {
+                        path: Some(path),
+                        version: 0,
+                        cache: None,
+                    });
+
+                    let child_node = FileNode::new(child_node_name, child_node_content);
+                    if let Some(file_node) = all_nodes.get_mut(&key) {
+                        file_node.try_get_children_mut()?.push(child_node.id);
                     }
-                    file_tree.insert(child_file_node.id, child_file_node);
+                    all_nodes.insert(child_node.id, child_node);
                 } else {
                     continue;
                 }
             } else {
-                let child_file_node = FileNode::new(Some(path.clone()), NodeType::DirectoryMd, None);
-                node_index_stack.push((path, child_file_node.id));
-                if let Some(file_node) = file_tree.get_mut(&key) {
-                    file_node.children.push(child_file_node.id);
+                let child_node_name = get_file_name(&path);
+                let child_node_content = NodeContent::DirectoryMd(Dir {
+                    path: path.clone(),
+                    children: vec![],
+                    expanded: false,
+                });
+
+                let child_node = FileNode::new(child_node_name, child_node_content);
+                node_index_stack.push((path, child_node.id));
+                if let Some(file_node) = all_nodes.get_mut(&key) {
+                    file_node.try_get_children_mut()?.push(child_node.id);
                 }
-                file_tree.insert(child_file_node.id, child_file_node);
+                all_nodes.insert(child_node.id, child_node);
             }
         }
     }
-    Ok((root_node_key, file_tree))
+    Ok((root_node_key, all_nodes))
 }
 
 // 异步读取图片并生成节点列表
-pub async fn get_img_handle_from_folder(path: PathBuf) -> Result<Vec<FileNode>, AppError> {
-    
-    // 之后遍历全部加入到all_nodes的字典中
-    Ok(vec![])
-} // 怎么设计？
+pub async fn fetch_img_handle(root_path: PathBuf) -> Result<HashMap<u32, FileNode>, AppError> {
+    let mut path_stack = vec![root_path];
+    let mut img_nodes = HashMap::new();
+    while let Some(path) = path_stack.pop() {
+        let mut dir = tokio::fs::read_dir(path).await?;
+
+        while let Some(entry) = dir.next_entry().await? {
+            let path = entry.path();
+
+            if !path.is_dir() {
+                if let Some(extension) = path.extension()
+                    && ["jpg", "png"].contains(&extension.to_string_lossy().as_ref())
+                {
+                    let (_, handle) = read_img_file(path.clone()).await?;
+                    let img_node_name = get_file_name(&path);
+                    let img_node_content = NodeContent::Image(ImageFile {
+                        path,
+                        name: format!("图片 {}", get_next_img_id()),
+                        cache: handle,
+                    });
+                    let file_node = FileNode::new(img_node_name, img_node_content);
+                    img_nodes.insert(file_node.id, file_node);
+                }
+            } else {
+                path_stack.push(path);
+            }
+        }
+    }
+
+    Ok(img_nodes)
+}
 
 // 递归渲染节点树
 pub fn view_node(
@@ -179,34 +418,37 @@ pub fn view_node(
     key: u32,
     depth: u16,
 ) -> Column<'_, FileTreeMessage> {
-    let node = all_file_nodes.get(&key).unwrap();
+    let node = all_file_nodes.get(&key).expect("前置逻辑不会出错!");
     let mut row = Row::new();
-
-    let children_node_view = if !node.children.is_empty() {
-        if node.expanded {
-            row = row.push(text(" ▼ ").size(FONT_SIZE_SMALLER));
-        } else {
-            row = row.push(text(" ▶ ").size(FONT_SIZE_SMALLER));
-        }
-        let mut column = Column::new().height(match node.expanded {
-            false => 0.into(),
-            true => Length::Shrink,
+    let children_node_view = if let Ok(children) = node.try_get_children() && !children.is_empty() 
+    {
+        let mut column = Column::new().height(match node.is_expanded() {
+            false => {
+                row = row.push(text(" ▶ ").size(FONT_SIZE_SMALLER));
+                0.into()
+            }
+            true => {
+                row = row.push(text(" ▼ ").size(FONT_SIZE_SMALLER));
+                Length::Shrink
+            }
         });
-        for child_key in &node.children {
-            column = column.push(view_node(
-                hovered_id,
-                selected_id,
-                all_file_nodes,
-                *child_key,
-                depth + 1,
-            ));
+        if let Ok(children) = node.try_get_children() {
+            for child_key in children {
+                column = column.push(view_node(
+                    hovered_id,
+                    selected_id,
+                    all_file_nodes,
+                    *child_key,
+                    depth + 1,
+                ));
+            }
         }
         Some(column)
     } else {
-        if node.node_type == NodeType::DirectoryMd {
+        if node.is_directory() {
             row = row.push(text(" ▷ ").size(FONT_SIZE_SMALLER));
         }
-        if node.path.is_none() {
+        if node.is_temp_file() {
             row = row.push(
                 text("临时 ")
                     .size(FONT_SIZE_SMALLER)
@@ -224,7 +466,7 @@ pub fn view_node(
     let node_view = mouse_area(
         container(
             row.push(
-                text(&node.file_name)
+                text(&node.name)
                     .size(FONT_SIZE_SMALLER)
                     .wrapping(text::Wrapping::None),
             )

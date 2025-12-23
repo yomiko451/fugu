@@ -1,23 +1,22 @@
 use crate::{
     common::*,
-    file_panel::operation::{self, FileNode, NodeType, load_file_tree},
+    file_panel::operation::{self, FileNode, ImageFile, MdFile, NodeContent, TempDir},
 };
 use iced::{
     Element, Task,
     widget::{Column, image, scrollable},
 };
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 #[derive(Debug)]
 pub struct FileTree {
-    roo_path: Option<PathBuf>,
     workplace_root_key: Option<u32>,
-    temp_workplace_root_key: u32,
-    temp_img_library_root_key: u32,
+    temp_workplace_root_key: Option<u32>,
+    temp_img_library_root_key: Option<u32>,
     pub all_nodes: HashMap<u32, FileNode>,
     hovered_file_node_id: Option<u32>,
-    selected_file_node_id: Option<u32>,
+    selected_node_id: Option<u32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -29,44 +28,34 @@ pub enum SaveMode {
 
 #[derive(Debug, Clone)]
 pub enum FileTreeMessage {
-    FetchFileTree(FileNode),
-    LoadFileTree(u32, HashMap<u32, FileNode>, PathBuf),
+    FetchMdFileData(PathBuf),
+    FetchImgFileData(PathBuf),
+    FetchFileTree(PathBuf),
+    FetchImgHandle(PathBuf),
+    LoadFileTree(u32, HashMap<u32, FileNode>),
+    LoadImgHandle(HashMap<u32, FileNode>),
     InsertToFileTree(FileNode),
     ChangeSelectedNode(u32),
     ChangeHoveredNode(u32),
     LoadSelectedNodeData,
     SaveFile(SaveMode, FileData),
-    OpenFile(NodeType),
     ReturnSaveResult(Result<(), AppError>),
     SendFileDataToEditor(FileData),
-    SendImgDataToPreview(ImgData),
+    SendImgDataToPreview(Vec<ImgData>),
     UpdateStringCache(String),
-    UpdateHandleCache(image::Handle),
     UpdateSelectedNodePath(PathBuf, FileData),
-    LogError(String),
+    HandleError(AppError),
     None,
 }
 
 impl FileTree {
     pub fn new() -> Self {
-        let mut temp_workplace_root_node =
-            FileNode::new(None, NodeType::DirectoryMd, Some("临时工作区".to_string()));
-        temp_workplace_root_node.expanded = true;
-        let temp_workplace_id = temp_workplace_root_node.id;
-        let mut temp_img_library_root_node =
-            FileNode::new(None, NodeType::DirectoryImg, Some("临时图片库".to_string()));
-        temp_img_library_root_node.expanded = true;
-        let temp_img_library_id = temp_img_library_root_node.id;
-        let mut all_nodes = HashMap::new();
-        all_nodes.insert(temp_workplace_id, temp_workplace_root_node);
-        all_nodes.insert(temp_img_library_id, temp_img_library_root_node);
         let file_panel = Self {
-            roo_path: None,
-            all_nodes,
+            all_nodes: HashMap::new(),
             workplace_root_key: None,
-            temp_workplace_root_key: temp_workplace_id,
-            temp_img_library_root_key: temp_img_library_id,
-            selected_file_node_id: None,
+            temp_workplace_root_key: None,
+            temp_img_library_root_key: None,
+            selected_node_id: None,
             hovered_file_node_id: None,
         };
         file_panel
@@ -78,67 +67,81 @@ impl FileTree {
         setting: &AppSetting,
     ) -> Task<FileTreeMessage> {
         match file_tree_message {
-            FileTreeMessage::OpenFile(node_type) => Task::perform(
-                operation::open_file(node_type),
-                move |file_node| match file_node {
-                    Some(file_node) => match node_type {
-                        NodeType::DirectoryMd => FileTreeMessage::FetchFileTree(file_node),
-                        NodeType::DirectoryImg => FileTreeMessage::InsertToFileTree(file_node),
-                        _ => FileTreeMessage::InsertToFileTree(file_node),
-                    },
-                    None => {
-                        warn!("文件路径为空!");
-                        FileTreeMessage::None
+            FileTreeMessage::FetchMdFileData(path) => {
+                Task::perform(operation::read_file(path), |result| match result {
+                    Ok((path, text)) => {
+                        let file_node = FileNode::new(
+                            operation::get_file_name(&path),
+                            NodeContent::Markdown(MdFile {
+                                path: Some(path),
+                                version: 0,
+                                cache: Some(Arc::new(text)),
+                            }),
+                        );
+                        FileTreeMessage::InsertToFileTree(file_node)
                     }
-                },
-            ),
-            FileTreeMessage::FetchFileTree(file_node) => {
-                Task::perform(load_file_tree(file_node.clone()), |tree| match tree {
-                    Ok((root_node_key, all_nodes)) => FileTreeMessage::LoadFileTree(
-                        root_node_key,
-                        all_nodes,
-                        file_node.path.expect("前置逻辑必定不会出错!"),
-                    ),
-                    Err(error) => FileTreeMessage::LogError(error.to_string()),
+                    Err(error) => FileTreeMessage::HandleError(error),
                 })
             }
-            // FilePanelMessage::RenameFileNodeFromEditor(new_name) => {
-            //     self.selected_file_node_id.and_then(|key| {
-            //         self.all_file_nodes
-            //             .get_mut(&key)
-            //             .and_then(|selected_file_node| {
-            //                 selected_file_node.file_name = new_name.clone();
-            //                 selected_file_node.path.as_mut().map(|path| {
-            //                     *path = path
-            //                         .parent()
-            //                         .expect("父路径必定存在不应该出错!")
-            //                         .join(new_name);
-            //                     Task::done(FilePanelMessage::OperationSaveFileData)
-            //                 })
-            //             })
-            //     });
-            //     Task::none()
-            // }
-            FileTreeMessage::LoadFileTree(root_file_node_key, all_files_tree, root_path) => {
-                self.workplace_root_key = Some(root_file_node_key);
-                self.all_nodes.extend(all_files_tree);
-                self.roo_path = Some(root_path);
+            FileTreeMessage::FetchImgFileData(path) => {
+                Task::perform(operation::read_img_file(path), |result| match result {
+                    Ok((path, handle)) => {
+                        let img_name = operation::get_file_name(&path);
+                        let file_node = FileNode::new(
+                            img_name,
+                            NodeContent::Image(ImageFile {
+                                path,
+                                name: format!("图片 {}", operation::get_next_img_id()),
+                                cache: handle,
+                            }),
+                        );
+                        FileTreeMessage::InsertToFileTree(file_node)
+                    }
+                    Err(error) => FileTreeMessage::HandleError(error),
+                })
+            }
+            FileTreeMessage::FetchFileTree(file_node) => Task::perform(
+                operation::fetch_file_tree(file_node.clone()),
+                |tree| match tree {
+                    Ok((root_node_key, all_nodes)) => {
+                        FileTreeMessage::LoadFileTree(root_node_key, all_nodes)
+                    }
+                    Err(error) => FileTreeMessage::HandleError(error),
+                },
+            ),
+            FileTreeMessage::FetchImgHandle(file_node) => Task::perform(
+                operation::fetch_img_handle(file_node),
+                |result| match result {
+                    Ok(img_nodes) => FileTreeMessage::LoadImgHandle(img_nodes),
+                    Err(error) => FileTreeMessage::HandleError(error),
+                },
+            ),
+            FileTreeMessage::LoadFileTree(root_node_key, all_nodes) => {
+                self.workplace_root_key = Some(root_node_key);
+                self.all_nodes.extend(all_nodes);
                 Task::none()
             }
+            FileTreeMessage::LoadImgHandle(img_nodes) => {
+                let ids = img_nodes.keys().copied().collect::<Vec<u32>>();
+                let img_datas = img_nodes
+                    .values()
+                    .into_iter()
+                    .filter_map(|img_node| img_node.try_get_img().ok())
+                    .map(|img_file| ImgData {
+                        name: img_file.name.clone(),
+                        handle: img_file.cache.clone(),
+                    })
+                    .collect::<Vec<ImgData>>();
+                self.all_nodes.extend(img_nodes);
+                self.insert_node_to_temp_img_library(ids);
+                Task::done(FileTreeMessage::SendImgDataToPreview(img_datas))
+            }
             FileTreeMessage::InsertToFileTree(file_node) => {
-                if file_node.node_type == NodeType::Markdown {
-                    let temp_workplace_root_node = self
-                        .all_nodes
-                        .get_mut(&self.temp_workplace_root_key)
-                        .expect("初始化必定插入不应当出错!");
-                    temp_workplace_root_node.children.push(file_node.id);
+                if file_node.is_md_file() {
+                    self.insert_node_to_temp_workplace(vec![file_node.id]);
                 } else {
                     // 通过前置逻辑可知必定是图片无需再次判断
-                    let temp_img_library_root_node = self
-                        .all_nodes
-                        .get_mut(&self.temp_img_library_root_key)
-                        .expect("初始化必定插入不应当出错!");
-                    temp_img_library_root_node.children.push(file_node.id);
+                    self.insert_node_to_temp_img_library(vec![file_node.id]);
                 };
                 let file_node_id = file_node.id;
                 self.all_nodes.insert(file_node.id, file_node);
@@ -150,90 +153,74 @@ impl FileTree {
             }
             FileTreeMessage::ChangeSelectedNode(key) => {
                 if let Some(selected_file_node) = self.all_nodes.get_mut(&key) {
-                    match selected_file_node.node_type {
-                        NodeType::DirectoryMd | NodeType::DirectoryImg => {
-                            selected_file_node.expanded = !selected_file_node.expanded;
+                    if selected_file_node.is_directory() {
+                        selected_file_node.reverse_expanded_if_node_is_directory();
+                        return Task::none();
+                    } else {
+                        self.selected_node_id = Some(key);
+                        return Task::done(FileTreeMessage::LoadSelectedNodeData);
+                    }
+                }
+                Task::none()
+            }
+            FileTreeMessage::LoadSelectedNodeData => self
+                .selected_node_id
+                .and_then(|key| {
+                    self.all_nodes.get_mut(&key).map(|selected_node| {
+                        if selected_node.is_img_file() {
+                            if let Ok(img_file) = selected_node.try_get_img() {
+                                let image_data = ImgData {
+                                    name: img_file.name.clone(),
+                                    handle: img_file.cache.clone(),
+                                };
+                                return Task::done(FileTreeMessage::SendImgDataToPreview(vec![
+                                    image_data,
+                                ]));
+                            }
                             return Task::none();
-                        }
-                        _ => {
-                            self.selected_file_node_id = Some(key);
-                            return Task::done(FileTreeMessage::LoadSelectedNodeData);
-                        }
-                    }
-                }
-                Task::none()
-            }
-            FileTreeMessage::LoadSelectedNodeData => {
-                if let Some(key) = self.selected_file_node_id {
-                    if let Some(selected_node) = self.all_nodes.get_mut(&key) {
-                        match selected_node.node_type {
-                            NodeType::Image => {
-                                if let Some(ref handle) = selected_node.handle_cache {
-                                    let image_data = ImgData {
-                                        name: selected_node.file_name.clone(),
-                                        handle: handle.clone(),
-                                    };
-                                    return Task::done(FileTreeMessage::SendImgDataToPreview(
-                                        image_data,
-                                    ));
+                        } else {
+                            if let Ok(MdFile {
+                                version,
+                                cache: Some(cache),
+                                ..
+                            }) = selected_node.try_get_md()
+                            {
+                                let file_data = FileData {
+                                    version: *version,
+                                    content: Arc::clone(cache),
+                                };
+                                return Task::done(FileTreeMessage::SendFileDataToEditor(
+                                    file_data,
+                                ));
+                            } else {
+                                if let Ok(path) = selected_node.try_get_path() {
+                                    return Task::perform(
+                                        operation::read_file(path.to_path_buf()),
+                                        |content| match content {
+                                            Ok((_, content)) => {
+                                                info!("文件数据读取成功!");
+                                                FileTreeMessage::UpdateStringCache(content)
+                                            }
+                                            Err(error) => FileTreeMessage::HandleError(error),
+                                        },
+                                    );
                                 } else {
-                                    if let Some(ref path) = selected_node.path {
-                                        return Task::perform(
-                                            operation::get_img_handle(path.clone()),
-                                            |result| match result {
-                                                Ok(handle) => {
-                                                    FileTreeMessage::UpdateHandleCache(handle)
-                                                }
-                                                Err(error) => {
-                                                    FileTreeMessage::LogError(error.to_string())
-                                                }
-                                            },
-                                        );
-                                    }
-                                }
-                                return Task::none();
-                            }
-                            NodeType::Markdown => {
-                                if let Some(ref cache) = selected_node.string_cache {
-                                    let file_data = FileData {
-                                        version: selected_node.version,
-                                        content: Arc::clone(cache),
-                                    };
-                                    return Task::done(FileTreeMessage::SendFileDataToEditor(
-                                        file_data,
+                                    return Task::done(FileTreeMessage::UpdateStringCache(
+                                        String::default(),
                                     ));
-                                } else {
-                                    if let Some(ref path) = selected_node.path {
-                                        return Task::perform(
-                                            operation::read_file(path.clone()),
-                                            |content| match content {
-                                                Ok(content) => {
-                                                    info!("文件数据读取成功!");
-                                                    FileTreeMessage::UpdateStringCache(content)
-                                                }
-                                                Err(error) => {
-                                                    FileTreeMessage::LogError(error.to_string())
-                                                }
-                                            },
-                                        );
-                                    } else {
-                                        return Task::done(FileTreeMessage::UpdateStringCache(
-                                            String::default(),
-                                        ));
-                                    }
                                 }
                             }
-                            _ => (),
                         }
-                    }
-                }
-                Task::none()
-            }
+                    })
+                })
+                .unwrap_or(Task::none()),
             FileTreeMessage::UpdateStringCache(content) => {
-                if let Some(key) = self.selected_file_node_id {
+                if let Some(key) = self.selected_node_id {
                     if let Some(selected_node) = self.all_nodes.get_mut(&key) {
                         let content = Arc::new(content);
-                        selected_node.string_cache = Some(Arc::clone(&content));
+                        if let Ok(md_file) = selected_node.try_get_md_mut() {
+                            md_file.cache = Some(Arc::clone(&content));
+                        }
                         let file_data = FileData {
                             version: 0,
                             content: Arc::clone(&content),
@@ -243,27 +230,19 @@ impl FileTree {
                 }
                 Task::none()
             }
-            FileTreeMessage::UpdateHandleCache(handle) => {
-                if let Some(key) = self.selected_file_node_id {
-                    if let Some(selected_node) = self.all_nodes.get_mut(&key) {
-                        selected_node.handle_cache = Some(handle.clone());
-                        let image_data = ImgData {
-                            name: selected_node.file_name.clone(),
-                            handle,
-                        };
-                        return Task::done(FileTreeMessage::SendImgDataToPreview(image_data));
-                    }
-                }
-                Task::none()
-            }
             FileTreeMessage::UpdateSelectedNodePath(path, file_data) => {
-                if let Some(key) = self.selected_file_node_id {
+                if let Some(key) = self.selected_node_id {
                     if let Some(selected_file_data) = self.all_nodes.get_mut(&key) {
-                        if selected_file_data.path.is_none() {
-                            selected_file_data.file_name =
-                                path.file_name().unwrap().to_string_lossy().into();
+                        if selected_file_data.is_temp_file() {
+                            selected_file_data.name = operation::get_file_name(&path);
                         }
-                        selected_file_data.path = Some(path);
+                        if let NodeContent::Markdown(MdFile {
+                            path: ref mut file_path,
+                            ..
+                        }) = selected_file_data.node_content
+                        {
+                            *file_path = Some(path)
+                        }
                         return Task::done(FileTreeMessage::SaveFile(
                             SaveMode::ManualSave,
                             file_data,
@@ -273,44 +252,46 @@ impl FileTree {
                 Task::none()
             }
             FileTreeMessage::SaveFile(save_mode, file_data) => {
-                if let Some(key) = self.selected_file_node_id {
+                if let Some(key) = self.selected_node_id {
                     if let Some(selected_file_node) = self.all_nodes.get_mut(&key) {
-                        selected_file_node.string_cache = Some(Arc::clone(&file_data.content));
-                        selected_file_node.version = file_data.version;
-                        if save_mode == SaveMode::SaveAs {
-                            return Task::perform(
-                                operation::save_file_dialog(selected_file_node.file_name.clone()),
-                                move |path| match path {
-                                    Some(path) => FileTreeMessage::UpdateSelectedNodePath(
-                                        path,
-                                        file_data.clone(),
-                                    ),
-                                    None => FileTreeMessage::ReturnSaveResult(Err(
-                                        AppError::FilePanelError("文件路径为空!".to_string()),
-                                    )),
-                                },
-                            );
-                        }
-                        if let Some(path) = selected_file_node.path.as_ref() {
-                            return Task::perform(
-                                operation::save_file(path.clone(), file_data.content),
-                                |result| match result {
-                                    Ok(_) => {
-                                        info!("文件保存成功!");
-                                        FileTreeMessage::ReturnSaveResult(Ok(()))
-                                    }
-                                    Err(error) => FileTreeMessage::ReturnSaveResult(Err(error)),
-                                },
-                            );
-                        } else {
-                            if save_mode == SaveMode::AutoSave {
-                                info!("文件保存缓冲区成功!");
-                                return Task::done(FileTreeMessage::ReturnSaveResult(Ok(())));
+                        if let Ok(md_file) = selected_file_node.try_get_md_mut() {
+                            md_file.cache = Some(Arc::clone(&file_data.content));
+                            md_file.version = file_data.version;
+                            if save_mode == SaveMode::SaveAs {
+                                return Task::perform(
+                                    operation::save_file_dialog(selected_file_node.name.clone()),
+                                    move |path| match path {
+                                        Some(path) => FileTreeMessage::UpdateSelectedNodePath(
+                                            path,
+                                            file_data.clone(),
+                                        ),
+                                        None => FileTreeMessage::ReturnSaveResult(Err(
+                                            AppError::FilePanelError("文件路径为空!".to_string()),
+                                        )),
+                                    },
+                                );
+                            }
+                            if let Some(path) = md_file.path.as_ref() {
+                                return Task::perform(
+                                    operation::save_file(path.clone(), file_data.content),
+                                    |result| match result {
+                                        Ok(_) => {
+                                            info!("文件保存成功!");
+                                            FileTreeMessage::ReturnSaveResult(Ok(()))
+                                        }
+                                        Err(error) => FileTreeMessage::ReturnSaveResult(Err(error)),
+                                    },
+                                );
                             } else {
-                                return Task::done(FileTreeMessage::SaveFile(
-                                    SaveMode::SaveAs,
-                                    file_data,
-                                ));
+                                if save_mode == SaveMode::AutoSave {
+                                    info!("文件保存缓冲区成功!");
+                                    return Task::done(FileTreeMessage::ReturnSaveResult(Ok(())));
+                                } else {
+                                    return Task::done(FileTreeMessage::SaveFile(
+                                        SaveMode::SaveAs,
+                                        file_data,
+                                    ));
+                                }
                             }
                         }
                     };
@@ -320,8 +301,8 @@ impl FileTree {
                 )))
             }
 
-            FileTreeMessage::LogError(error_info) => {
-                error!(error_info);
+            FileTreeMessage::HandleError(error) => {
+                info!("{}", error.to_string());
                 Task::none()
             }
             _ => Task::none(),
@@ -331,50 +312,90 @@ impl FileTree {
     // 递归渲染文件树
     pub fn view(&self) -> Element<'_, FileTreeMessage> {
         let hidden_scroller = scrollable::Scrollbar::new().scroller_width(0).width(0);
-        let mut workplace_view = Column::new();
-        let temp_wordplace_root_node = self
-            .all_nodes
-            .get(&self.temp_workplace_root_key)
-            .expect("初始化必定插入此键值对不应当出错!");
-        let temp_img_library_root_node = self
-            .all_nodes
-            .get(&self.temp_img_library_root_key)
-            .expect("初始化必定插入此键值对不应当出错!");
-        if !temp_wordplace_root_node.children.is_empty() {
-            workplace_view = workplace_view
-                .push(operation::view_node(
-                    self.hovered_file_node_id.clone(),
-                    self.selected_file_node_id,
-                    &self.all_nodes,
-                    self.temp_workplace_root_key,
-                    0,
-                ))
-                .spacing(SPACING);
+        let mut workplace_view = Column::new().spacing(SPACING_SMALLER);
+        if let Some(key) = self.temp_workplace_root_key {
+            workplace_view = workplace_view.push(operation::view_node(
+                self.hovered_file_node_id.clone(),
+                self.selected_node_id,
+                &self.all_nodes,
+                key,
+                0,
+            ));
         }
-        if !temp_img_library_root_node.children.is_empty() {
-            workplace_view = workplace_view
-                .push(operation::view_node(
-                    self.hovered_file_node_id.clone(),
-                    self.selected_file_node_id,
-                    &self.all_nodes,
-                    self.temp_img_library_root_key,
-                    0,
-                ))
-                .spacing(SPACING);
+        if let Some(key) = self.temp_img_library_root_key {
+            workplace_view = workplace_view.push(operation::view_node(
+                self.hovered_file_node_id.clone(),
+                self.selected_node_id,
+                &self.all_nodes,
+                key,
+                0,
+            ));
         }
         if let Some(key) = self.workplace_root_key {
-            workplace_view = workplace_view
-                .push(operation::view_node(
-                    self.hovered_file_node_id.clone(),
-                    self.selected_file_node_id,
-                    &self.all_nodes,
-                    key,
-                    0,
-                ))
-                .spacing(SPACING);
+            workplace_view = workplace_view.push(operation::view_node(
+                self.hovered_file_node_id.clone(),
+                self.selected_node_id,
+                &self.all_nodes,
+                key,
+                0,
+            ));
         }
         scrollable(workplace_view)
             .direction(scrollable::Direction::Vertical(hidden_scroller))
             .into()
+    }
+
+    pub fn insert_node_to_temp_workplace(&mut self, ids: Vec<u32>) {
+        if let Some(key) = self.temp_workplace_root_key {
+            self.all_nodes.get_mut(&key).and_then(|root_node| {
+                root_node
+                    .try_get_children_mut()
+                    .map(|children| {
+                        for id in ids {
+                            children.push(id)
+                        }
+                    })
+                    .ok()
+            });
+        } else {
+            let temp_workplace_root_node = FileNode::new(
+                "临时工作区".to_string(),
+                NodeContent::DirectoryTemp(TempDir {
+                    children: ids,
+                    expanded: true,
+                }),
+            );
+            let temp_workplace_id = temp_workplace_root_node.id;
+            self.all_nodes
+                .insert(temp_workplace_id, temp_workplace_root_node);
+            self.temp_workplace_root_key = Some(temp_workplace_id);
+        }
+    }
+
+    pub fn insert_node_to_temp_img_library(&mut self, ids: Vec<u32>) {
+        if let Some(key) = self.temp_img_library_root_key {
+            self.all_nodes.get_mut(&key).and_then(|root_node| {
+                root_node
+                    .try_get_children_mut()
+                    .map(|children| {
+                        for id in ids {
+                            children.push(id)
+                        }
+                    })
+                    .ok()
+            });
+        } else {
+            let temp_img_library_root_node = FileNode::new(
+                "临时图片库".to_string(),
+                NodeContent::DirectoryTemp(TempDir {
+                    children: ids,
+                    expanded: true,
+                }),
+            );
+            let temp_img_library_id = temp_img_library_root_node.id;
+            self.all_nodes
+                .insert(temp_img_library_id, temp_img_library_root_node);
+            self.temp_img_library_root_key = Some(temp_img_library_id);
+        }
     }
 }

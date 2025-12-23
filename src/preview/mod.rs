@@ -35,7 +35,7 @@ pub struct Preview {
 #[derive(Debug, Clone)]
 pub enum PreviewMessage {
     SyncContnetWithEditor(Arc<String>),
-    GetImgPathFromFilePanel(ImgData),
+    GetImgPathFromFilePanel(Vec<ImgData>),
     EditorAction(text_editor::Action),
     ChangePageTo(PreviewPage),
     ChangeSnapShot(String),
