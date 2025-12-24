@@ -4,12 +4,14 @@ use iced::{Border, Color, Shadow, Theme, Vector, border::Radius, theme::Palette,
 // FileData用于文件区和编辑区交互
 #[derive(Debug, Clone)]
 pub struct FileData {
+    pub id: u32,
     pub version: u64,
     pub content: Arc<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct ImgData {
+    pub id: u32,
     pub name: String,
     pub handle: image::Handle,
 }

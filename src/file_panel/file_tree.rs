@@ -126,8 +126,10 @@ impl FileTree {
                 let img_datas = img_nodes
                     .values()
                     .into_iter()
-                    .filter_map(|img_node| img_node.try_get_img().ok())
-                    .map(|img_file| ImgData {
+                    .filter_map(|img_node| img_node.try_get_img().ok()
+                        .map(|img_file| (img_file, img_node.id)))
+                    .map(|(img_file, id)| ImgData {
+                        id,
                         name: img_file.name.clone(),
                         handle: img_file.cache.clone(),
                     })
@@ -170,6 +172,7 @@ impl FileTree {
                     if selected_node.is_img_file() {
                         if let Ok(img_file) = selected_node.try_get_img() {
                             let image_data = ImgData {
+                                id: selected_node.id,
                                 name: img_file.name.clone(),
                                 handle: img_file.cache.clone(),
                             };
@@ -186,6 +189,7 @@ impl FileTree {
                         }) = selected_node.try_get_md()
                         {
                             let file_data = FileData {
+                                id: selected_node.id,
                                 version: *version,
                                 content: Arc::clone(cache),
                             };
@@ -220,6 +224,7 @@ impl FileTree {
                         md_file.cache = Some(Arc::clone(&content));
                     }
                     let file_data = FileData {
+                        id: selected_node.id,
                         version: 0,
                         content: Arc::clone(&content),
                     };
@@ -243,12 +248,11 @@ impl FileTree {
                     Task::done(FileTreeMessage::SaveFile(SaveMode::ManualSave, file_data))
                 })
                 .unwrap_or(Task::none()),
-            FileTreeMessage::SaveFile(save_mode, file_data) => self
-                .selected_node_id
-                .and_then(|key| self.all_nodes.get_mut(&key))
-                .and_then(|selected_file_node| {
-                    let name = selected_file_node.name.clone();
-                    selected_file_node
+            FileTreeMessage::SaveFile(save_mode, file_data) => 
+                self.all_nodes.get_mut(&file_data.id)
+                .and_then(|file_node| {
+                    let name = file_node.name.clone();
+                    file_node
                         .try_get_md_mut()
                         .ok()
                         .map(|md_file| (md_file, name))
