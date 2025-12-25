@@ -31,6 +31,9 @@ pub fn get_file_name(path: &Path) -> String {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct IsAutoSave(pub bool);
+
 #[derive(Debug, Clone)]
 pub struct FileNode {
     pub id: u32,

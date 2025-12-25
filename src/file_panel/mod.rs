@@ -2,7 +2,10 @@ use std::path::PathBuf;
 
 use crate::{
     common::*,
-    file_panel::{file_tree::{FileTree, FileTreeMessage, SaveMode}, operation::{FileNode, MdFile, NodeContent}},
+    file_panel::{
+        file_tree::{FileTree, FileTreeMessage},
+        operation::{FileNode, IsAutoSave, MdFile, NodeContent},
+    },
 };
 use iced::{
     Alignment,
@@ -14,9 +17,8 @@ use iced::{
     Background, Length, Padding, Task, Theme,
     widget::{Container, column, container, rule, text},
 };
-use tracing::{info, warn};
-mod operation; // 各种文件操作，新建、删除、重命名、移动等
 mod file_tree;
+mod operation; // 各种文件操作，新建、删除、重命名、移动等
 mod outline;
 
 #[derive(Debug)]
@@ -46,7 +48,7 @@ pub enum FilePanelMessage {
     SendFileDataToEditor(FileData),
     SendImgDataToPreview(Vec<ImgData>),
     FileTree(FileTreeMessage),
-    
+
     HandleError(AppError),
 }
 
@@ -69,69 +71,79 @@ impl FilePanel {
                 Task::none()
             }
             // 转发给文件树模块
-            FilePanelMessage::FileTree(file_tree_message) => {
-                match file_tree_message {
-                    FileTreeMessage::ReturnSaveResult(result) => {
-                        Task::done(FilePanelMessage::ReturnSaveResult(result))
-                    }
-                    FileTreeMessage::SendFileDataToEditor(file_data) => {
-                        Task::done(FilePanelMessage::SendFileDataToEditor(file_data))
-                    }
-                    FileTreeMessage::SendImgDataToPreview(image_data) => {
-                        Task::done(FilePanelMessage::SendImgDataToPreview(image_data))
-                    }
-                    _ => self.file_tree.update(file_tree_message, setting).map(FilePanelMessage::FileTree)
+            FilePanelMessage::FileTree(file_tree_message) => match file_tree_message {
+                FileTreeMessage::ReturnSaveResult(result) => {
+                    Task::done(FilePanelMessage::ReturnSaveResult(result))
                 }
-            }
+                FileTreeMessage::SendFileDataToEditor(file_data) => {
+                    Task::done(FilePanelMessage::SendFileDataToEditor(file_data))
+                }
+                FileTreeMessage::SendImgDataToPreview(image_data) => {
+                    Task::done(FilePanelMessage::SendImgDataToPreview(image_data))
+                }
+                _ => self
+                    .file_tree
+                    .update(file_tree_message, setting)
+                    .map(FilePanelMessage::FileTree),
+            },
             FilePanelMessage::OpenMdFolder => {
-                Task::perform(operation::open_folder_dialog(), |result| {
-                    match result {
-                        Some(path) => FilePanelMessage::FileTree(FileTreeMessage::FetchFileTree(path)),
-                        None => FilePanelMessage::HandleError(AppError::FilePanelError("文件路径为空!".to_string()))
-                    }
+                Task::perform(operation::open_folder_dialog(), |result| match result {
+                    Some(path) => FilePanelMessage::FileTree(FileTreeMessage::FetchFileTree(path)),
+                    None => FilePanelMessage::HandleError(AppError::FilePanelError(
+                        "文件路径为空!".to_string(),
+                    )),
                 })
             }
             FilePanelMessage::OpenFile => {
-                Task::perform(operation::open_md_file_dialog(), |result| {
-                    match result {
-                        Some(path) => FilePanelMessage::FileTree(FileTreeMessage::FetchMdFileData(path)),
-                        None => FilePanelMessage::HandleError(AppError::FilePanelError("文件路径为空!".to_string()))
+                Task::perform(operation::open_md_file_dialog(), |result| match result {
+                    Some(path) => {
+                        FilePanelMessage::FileTree(FileTreeMessage::FetchMdFileData(path))
                     }
+                    None => FilePanelMessage::HandleError(AppError::FilePanelError(
+                        "文件路径为空!".to_string(),
+                    )),
                 })
             }
             FilePanelMessage::ImportImg => {
-                Task::perform(operation::open_img_file_dialog(), |result| {
-                    match result {
-                        Some(path) => FilePanelMessage::FileTree(FileTreeMessage::FetchImgFileData(path)),
-                        None => FilePanelMessage::HandleError(AppError::FilePanelError("文件路径为空!".to_string()))
+                Task::perform(operation::open_img_file_dialog(), |result| match result {
+                    Some(path) => {
+                        FilePanelMessage::FileTree(FileTreeMessage::FetchImgFileData(path))
                     }
+                    None => FilePanelMessage::HandleError(AppError::FilePanelError(
+                        "文件路径为空!".to_string(),
+                    )),
                 })
             }
             FilePanelMessage::ImportImgFolder => {
-                Task::perform(operation::open_img_folder_dialog(), |result| {
-                    match result {
-                        Some(path) => FilePanelMessage::FileTree(FileTreeMessage::FetchImgHandle(path)),
-                        None => FilePanelMessage::HandleError(AppError::FilePanelError("文件路径为空!".to_string()))
-                    }
+                Task::perform(operation::open_img_folder_dialog(), |result| match result {
+                    Some(path) => FilePanelMessage::FileTree(FileTreeMessage::FetchImgHandles(path)),
+                    None => FilePanelMessage::HandleError(AppError::FilePanelError(
+                        "文件路径为空!".to_string(),
+                    )),
                 })
             }
             FilePanelMessage::CreateNewFile => {
-                let new_file = FileNode::new("新建文件.md".to_string(), NodeContent::Markdown(MdFile{
-                    path: None,
-                    version: 0,
-                    cache: None
-                }));
-                Task::done(FilePanelMessage::FileTree(FileTreeMessage::InsertToFileTree(new_file)))
+                let new_file = FileNode::new(
+                    "新建文件.md".to_string(),
+                    NodeContent::Markdown(MdFile {
+                        path: None,
+                        version: 0,
+                        cache: None,
+                    }),
+                );
+                Task::done(FilePanelMessage::FileTree(
+                    FileTreeMessage::InsertToFileTree(new_file),
+                ))
             }
-            FilePanelMessage::AutoSave(file_data) => {
-                Task::done(FilePanelMessage::FileTree(FileTreeMessage::SaveFile(SaveMode::AutoSave, file_data)))
-            }
-            FilePanelMessage::Save(file_data) => {
-                Task::done(FilePanelMessage::FileTree(FileTreeMessage::SaveFile(SaveMode::ManualSave, file_data)))
-            }
-            FilePanelMessage::SaveAs(file_data) => {
-                Task::done(FilePanelMessage::FileTree(FileTreeMessage::SaveFile(SaveMode::SaveAs, file_data)))
-            }
+            FilePanelMessage::AutoSave(file_data) => Task::done(FilePanelMessage::FileTree(
+                FileTreeMessage::UpdateNodeInfo(IsAutoSave(true), file_data),
+            )),
+            FilePanelMessage::Save(file_data) => Task::done(FilePanelMessage::FileTree(
+                FileTreeMessage::UpdateNodeInfo(IsAutoSave(false), file_data),
+            )),
+            FilePanelMessage::SaveAs(file_data) => Task::done(FilePanelMessage::FileTree(
+                FileTreeMessage::SaveAs(file_data),
+            )),
             _ => Task::none(),
         }
     }
@@ -139,7 +151,7 @@ impl FilePanel {
     pub fn view(&self) -> Container<'_, FilePanelMessage> {
         let panel = match self.mode {
             Mode::FileTree => self.file_tree.view().map(FilePanelMessage::FileTree),
-            Mode::Content => text("aa").into()
+            Mode::Content => text("aa").into(),
         };
         container(column![
             row![
@@ -193,9 +205,7 @@ impl FilePanel {
                     }
                 })
             ],
-            container(panel)
-                .padding(PADDING_BASE)
-                .height(Length::Fill),
+            container(panel).padding(PADDING_BASE).height(Length::Fill),
             container(
                 // 去除默认添加的临时工作区根节点所以要 -1
                 text!("文件节点数  {}", self.file_tree.all_nodes.len()).size(FONT_SIZE_BASE),

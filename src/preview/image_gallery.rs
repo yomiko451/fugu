@@ -11,7 +11,6 @@ use iced::{
         rule, scrollable, space, text,
     },
 };
-use iced_aw::style::colors::PALE_GREEN;
 use tracing::info;
 
 #[derive(Debug, Default)]
@@ -41,7 +40,7 @@ impl ImageGallery {
         image_gallery_message: ImageGalleryMessage,
     ) -> Task<ImageGalleryMessage> {
         match image_gallery_message {
-            ImageGalleryMessage::LoadImage(mut image_data) => {
+            ImageGalleryMessage::LoadImage(image_data) => {
                 let image_count = image_data.len();
                 if image_count == 1 {
                     let image = image_data
@@ -83,7 +82,7 @@ impl ImageGallery {
 
     pub fn view(&self) -> Element<'_, ImageGalleryMessage> {
         let hidden_scroller = scrollable::Scrollbar::new().scroller_width(0).width(0);
-        let (tool, content): (
+        let (head, body): (
             Row<'_, ImageGalleryMessage>,
             Element<'_, ImageGalleryMessage>,
         ) = {
@@ -123,7 +122,7 @@ impl ImageGallery {
                     });
                     match mode {
                         ImageGalleryMode::GridView => {
-                            let mut grid = Grid::new()
+                            let mut body = Grid::new()
                                 .columns(2)
                                 .spacing(SPACING_BIGGER)
                                 .height(Length::Shrink);
@@ -131,7 +130,7 @@ impl ImageGallery {
                             images.sort_by_key(|image| image.0);
                             for (name, handle) in images {
                                 let image = image(handle).content_fit(iced::ContentFit::Contain);
-                                grid = grid.push(
+                                body = body.push(
                                     column![
                                         text(name)
                                             .size(FONT_SIZE_SMALLER)
@@ -143,10 +142,10 @@ impl ImageGallery {
                                 );
                             }
 
-                            (row![space::horizontal(), radio_a, radio_b], grid.into())
+                            (row![space::horizontal(), radio_a, radio_b], body.into())
                         }
                         ImageGalleryMode::ListView => {
-                            let content: Element<'_, ImageGalleryMessage> = if let Some(handle) =
+                            let body: Element<'_, ImageGalleryMessage> = if let Some(handle) =
                                 self.selected_img_name
                                     .as_ref()
                                     .and_then(|key| self.images.get(key))
@@ -195,7 +194,7 @@ impl ImageGallery {
 
                             (
                                 row![pick_list, space::horizontal(), radio_a, radio_b],
-                                content,
+                                body,
                             )
                         }
                     }
@@ -210,7 +209,7 @@ impl ImageGallery {
             }
         };
         container(column![
-            tool.spacing(SPACING_BIGGER)
+            head.spacing(SPACING_BIGGER)
                 .padding(Padding::from([PADDING_SMALLER, PADDING_BIGGER]))
                 .height(Length::Shrink),
             rule::horizontal(1).style(|theme: &Theme| {
@@ -223,7 +222,7 @@ impl ImageGallery {
                 }
             }),
             container(
-                scrollable(content).direction(scrollable::Direction::Vertical(hidden_scroller))
+                scrollable(body).direction(scrollable::Direction::Vertical(hidden_scroller))
             )
             .height(Length::Fill)
             .padding(Padding::from([PADDING_BASE, PADDING_BIGGER]))
