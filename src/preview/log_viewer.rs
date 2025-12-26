@@ -62,8 +62,6 @@ impl LogViewer {
             .with_timer(timer_format)
             .init();
 
-        info!("日志模块初始化完成!");
-
         Self {
             log: VecDeque::with_capacity(100),
         }
@@ -126,7 +124,7 @@ impl LogViewer {
         Subscription::run(|| {
             iced::stream::channel(100, async move |mut output| {
                 let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-                let _ = LOG_SENDER.set(tx);
+                let _ = LOG_SENDER.set(tx); // 忽略错误
                 while let Some(new_log) = rx.recv().await {
                     output
                         .send(LogViewerMessage::WriteLog(new_log))

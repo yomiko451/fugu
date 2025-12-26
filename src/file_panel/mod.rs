@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use crate::{
     common::*,
     file_panel::{
@@ -17,6 +15,7 @@ use iced::{
     Background, Length, Padding, Task, Theme,
     widget::{Container, column, container, rule, text},
 };
+use tracing::info;
 mod file_tree;
 mod operation; // 各种文件操作，新建、删除、重命名、移动等
 mod outline;
@@ -144,6 +143,10 @@ impl FilePanel {
             FilePanelMessage::SaveAs(file_data) => Task::done(FilePanelMessage::FileTree(
                 FileTreeMessage::SaveAs(file_data),
             )),
+            FilePanelMessage::HandleError(error) => {
+                info!("{}", error.to_string());
+                Task::none()
+            }
             _ => Task::none(),
         }
     }

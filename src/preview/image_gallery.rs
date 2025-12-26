@@ -49,7 +49,7 @@ impl ImageGallery {
                         .expect("必定有一个元素不应当出错!");
                     self.selected_img_name = Some(image.name.clone());
                     self.images.entry(image.name).or_insert_with(|| {
-                        info!("图片插入插入成功!");
+                        info!("图片载入成功!");
                         image.handle
                     });
                     self.mode = Some(ImageGalleryMode::ListView);

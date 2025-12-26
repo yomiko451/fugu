@@ -1,6 +1,6 @@
 use crate::{
     common::*,
-    preview::{markdown, viewer::CustomViewer},
+    preview::{markdown, viewer::{CUSTOM_SETTINGS, CustomViewer}},
 };
 use iced::{
     Element, Length, Padding, Task, Theme,
@@ -113,7 +113,7 @@ impl Markdown {
             container(
                 scrollable(iced_markdown::view_with(
                     self.content.items(),
-                    DEFAULT_THEME.clone(),
+                    *CUSTOM_SETTINGS,
                     &CustomViewer { image: &self.image },
                 ))
                 .direction(scrollable::Direction::Vertical(hidden_scroller))
