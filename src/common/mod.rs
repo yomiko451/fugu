@@ -66,10 +66,10 @@ pub const FONT_SIZE_BASE: u32 = 16;
 pub const FONT_SIZE_SMALLER: u32 = 14;
 pub const FONT_SIZE_SMALLEST: u32 = 12;
 // 默认内边距
-pub const PADDING_BIGGER: u16 = 20;
-pub const PADDING_BASE: u16 = 10;
-pub const PADDING_SMALLER: u16 = 5;
-pub const PADDING_SMALLEST: u16 = 2;
+pub const PADDING_BIGGER: f32 = 20.;
+pub const PADDING_BASE: f32 = 10.;
+pub const PADDING_SMALLER: f32 = 5.;
+pub const PADDING_SMALLEST: f32 = 2.;
 // 默认间距
 pub const SPACING_BIGGER: u32 = 20;
 pub const SPACING: u32 = 10;
@@ -143,6 +143,14 @@ pub const MENU_OFFSET: f32 = 5.;
 // 编辑区相关常量
 pub const TABLE_DIALOG_HEIGHT: u32 = 150;
 pub const TABLE_DIALOG_WIDTH: u32 = 200;
+pub const H1_COLOR: Color = Color::from_rgb8(229, 192, 123);
+pub const H2_COLOR: Color = Color::from_rgb8(198, 120, 221);
+pub const H3_COLOR: Color = Color::from_rgb8(97, 175, 239);
+pub const H4_COLOR: Color = Color::from_rgb8(86, 182, 194);
+pub const H5_COLOR: Color = Color::from_rgb8(199, 199, 199);
+pub const H6_COLOR: Color = Color::from_rgb8(150, 150, 150);
+pub const ORDERED_LSIT_COLOR: Color = Color::from_rgb8(209, 154, 102);
+pub const UNORDERED_LSIT_COLOR: Color = Color::from_rgb8(152, 195, 121);
 // 预览区相关常量
 //pub const PREVIEW_BG_COLOR: Color = Color::from_rgb8(47, 52, 62);
 

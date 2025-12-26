@@ -3,10 +3,7 @@ use iced::{
     widget::{column, container, mouse_area, row, space, text, text_input},
 };
 
-use crate::common::{
-    DEFAULT_BORDER, PADDING_BASE, PADDING_BIGGER, SHADOW_BASE_0_OFFSET, SPACING, SPACING_SMALLER,
-    TABLE_DIALOG_HEIGHT, TABLE_DIALOG_WIDTH,
-};
+use crate::common::*;
 
 #[derive(Debug, Default, Clone)]
 pub struct TableDialog {
@@ -76,7 +73,7 @@ impl TableDialog {
         ])
         .width(TABLE_DIALOG_WIDTH)
         .height(TABLE_DIALOG_HEIGHT)
-        .padding(Padding::from([0, PADDING_BIGGER]))
+        .padding(Padding::from([0., PADDING_BIGGER]))
         .style(|theme: &Theme| {
             let ex_palette = theme.extended_palette();
             container::Style {

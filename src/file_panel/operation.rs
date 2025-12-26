@@ -473,7 +473,7 @@ pub fn view_node(
                     .size(FONT_SIZE_SMALLER)
                     .wrapping(text::Wrapping::None),
             )
-            .padding(Padding::from([PADDING_SMALLEST, depth * TEXT_INDENTATION])),
+            .padding(Padding::from([PADDING_SMALLEST, (depth * TEXT_INDENTATION) as f32])),
         )
         .width(Length::Fill)
         .style(move |theme: &Theme| {
