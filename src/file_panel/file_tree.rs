@@ -4,7 +4,6 @@ use crate::{
 };
 use iced::{
     Element, Task,
-    wgpu::wgc::id,
     widget::{Column, scrollable},
 };
 use std::{collections::HashMap, path::PathBuf, sync::Arc};

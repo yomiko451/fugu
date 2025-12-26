@@ -1,4 +1,12 @@
-use crate::{common::*, preview::{image_gallery::{ImageGallery, ImageGalleryMessage}, markdown::{Markdown, MarkdownMessage}}};
+use crate::{
+    common::*,
+    preview::{
+        image_gallery::{ImageGallery, ImageGalleryMessage},
+        log_viewer::{LogViewer, LogViewerMessage},
+        markdown::{Markdown, MarkdownMessage},
+        text_board::{TextBoard, TextBoardMessage},
+    },
+};
 use iced::{
     Background, Border, Color, Element, Length, Padding, Shadow, Subscription, Task, Theme,
     alignment::Horizontal,
@@ -6,30 +14,30 @@ use iced::{
     mouse,
     overlay::menu,
     widget::{
-        Container, column, container, markdown as iced_markdown, mouse_area, pick_list, row, rule, scrollable,
-        space, text, text_editor,
+        Container, column, container, markdown as iced_markdown, mouse_area, pick_list, row, rule,
+        scrollable, space, text, text_editor,
     },
 };
 use jiff::civil::Weekday;
 use std::{path::PathBuf, sync::Arc};
 use tracing::info;
 mod image_gallery;
-mod operation;
+mod log_viewer;
 mod markdown;
+mod text_board;
 mod viewer;
 #[derive(Debug)]
 pub struct Preview {
     current_weekday: String,
     current_date_time: String,
     current_page: PreviewPage,
-    
+
     // 各个字组件
     content: Option<Arc<String>>,
     marddown: Markdown,
     image_gallery: ImageGallery,
-    snap_shot_index_state: Vec<String>,
-    current_snap_shot_index: Option<String>,
-    current_snapshot_content: text_editor::Content,
+    text_board: TextBoard,
+    log_viewer: LogViewer,
 }
 
 #[derive(Debug, Clone)]
@@ -38,19 +46,20 @@ pub enum PreviewMessage {
     GetImgPathFromFilePanel(Vec<ImgData>),
     EditorAction(text_editor::Action),
     ChangePageTo(PreviewPage),
-    ChangeSnapShot(String),
     UpdateTimeStr,
     // 处理子模块消息
     Markdown(MarkdownMessage),
-    ImageGallery(ImageGalleryMessage)
+    ImageGallery(ImageGalleryMessage),
+    TextBoard(TextBoardMessage),
+    LogView(LogViewerMessage),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PreviewPage {
     MarkDown,
-    SnapShot,
+    TextBoard,
     ImageGallery,
-    Log,
+    LogViewer,
 }
 
 impl Preview {
@@ -59,62 +68,64 @@ impl Preview {
             current_weekday: Preview::get_week_str(),
             current_date_time: Preview::get_time_str(),
             current_page: PreviewPage::MarkDown,
-            current_snapshot_content: text_editor::Content::default(),
             content: None,
             marddown: Markdown::default(),
             image_gallery: ImageGallery::default(),
-            current_snap_shot_index: None,
-            snap_shot_index_state: vec![
-                "快照1".to_string(),
-                "快照2".to_string(),
-                "快照3".to_string(),
-            ],
+            text_board: TextBoard::default(),
+            log_viewer: LogViewer::new(),
         }
     }
 
-    pub fn update(&mut self, preview_message: PreviewMessage, setting: &AppSetting) -> Task<PreviewMessage> {
+    pub fn update(
+        &mut self,
+        preview_message: PreviewMessage,
+        setting: &AppSetting,
+    ) -> Task<PreviewMessage> {
         match preview_message {
-            PreviewMessage::GetImgPathFromFilePanel(image_data) => {
-                Task::done(PreviewMessage::ImageGallery(ImageGalleryMessage::LoadImage(image_data)))
-            }
+            PreviewMessage::GetImgPathFromFilePanel(image_data) => Task::done(
+                PreviewMessage::ImageGallery(ImageGalleryMessage::LoadImage(image_data)),
+            ),
             PreviewMessage::UpdateTimeStr => {
                 self.current_date_time = Preview::get_time_str();
                 Task::none()
             }
-            PreviewMessage::SyncContnetWithEditor(raw) => {
-                self.marddown.update(MarkdownMessage::LoadRawText(raw)).map(PreviewMessage::Markdown)
-            }
-            PreviewMessage::EditorAction(action) => {
-                // 禁止编辑操作让快照页面只读
-                if !action.is_edit() {
-                    self.current_snapshot_content.perform(action);
-                }
-                Task::none()
-            }
+            PreviewMessage::SyncContnetWithEditor(raw) => self
+                .marddown
+                .update(MarkdownMessage::LoadRawText(raw))
+                .map(PreviewMessage::Markdown),
             PreviewMessage::ChangePageTo(page) => {
                 self.current_page = page;
                 Task::none()
             }
-            PreviewMessage::ChangeSnapShot(snap_shot_index) => {
-                self.current_snap_shot_index = Some(snap_shot_index);
-                Task::none()
-            }
             // 处理各种子模块预览界面消息
-            PreviewMessage::Markdown(markdown_message) => {
-                match markdown_message {
-                    
-                    _ => self.marddown.update(markdown_message).map(PreviewMessage::Markdown)
+            PreviewMessage::Markdown(markdown_message) => match markdown_message {
+                _ => self
+                    .marddown
+                    .update(markdown_message)
+                    .map(PreviewMessage::Markdown),
+            },
+            PreviewMessage::ImageGallery(image_gallery_message) => match image_gallery_message {
+                ImageGalleryMessage::ShowImageGallery => {
+                    self.current_page = PreviewPage::ImageGallery;
+                    Task::none()
                 }
-            }
-            PreviewMessage::ImageGallery(image_gallery_message) => {
-                match image_gallery_message {
-                    ImageGalleryMessage::ShowImageGallery => {
-                        self.current_page = PreviewPage::ImageGallery;
-                        Task::none()
-                    }
-                    _ => self.image_gallery.update(image_gallery_message).map(PreviewMessage::ImageGallery)
-                }
-            }
+                _ => self
+                    .image_gallery
+                    .update(image_gallery_message)
+                    .map(PreviewMessage::ImageGallery),
+            },
+            PreviewMessage::TextBoard(text_board_message) => match text_board_message {
+                _ => self
+                    .text_board
+                    .update(text_board_message)
+                    .map(PreviewMessage::TextBoard),
+            },
+            PreviewMessage::LogView(log_view_message) => match log_view_message {
+                _ => self
+                    .log_viewer
+                    .update(log_view_message)
+                    .map(PreviewMessage::LogView),
+            },
             _ => Task::none(),
         }
     }
@@ -122,9 +133,11 @@ impl Preview {
     pub fn view(&self) -> Container<'_, PreviewMessage> {
         let preview = match self.current_page {
             PreviewPage::MarkDown => self.marddown.view().map(PreviewMessage::Markdown),
-            PreviewPage::ImageGallery => self.image_gallery.view().map(PreviewMessage::ImageGallery),
-            PreviewPage::SnapShot => self.generate_snapshot_component(),
-            _ => self.marddown.view().map(PreviewMessage::Markdown),
+            PreviewPage::ImageGallery => {
+                self.image_gallery.view().map(PreviewMessage::ImageGallery)
+            }
+            PreviewPage::TextBoard => self.text_board.veiw().map(PreviewMessage::TextBoard),
+            PreviewPage::LogViewer => self.log_viewer.view().map(PreviewMessage::LogView),
         };
 
         container(column![
@@ -132,8 +145,8 @@ impl Preview {
                 row![
                     self.generate_page_change_button("预览", PreviewPage::MarkDown),
                     self.generate_page_change_button("图片", PreviewPage::ImageGallery),
-                    self.generate_page_change_button("快照", PreviewPage::SnapShot),
-                    self.generate_page_change_button("日志", PreviewPage::Log),
+                    self.generate_page_change_button("文本", PreviewPage::TextBoard),
+                    self.generate_page_change_button("日志", PreviewPage::LogViewer),
                 ]
                 .height(Length::Shrink)
             )
@@ -148,7 +161,8 @@ impl Preview {
             container(
                 row![
                     space::horizontal(),
-                    text!("{}  {}", self.current_date_time, self.current_weekday).size(FONT_SIZE_BASE),
+                    text!("{}  {}", self.current_date_time, self.current_weekday)
+                        .size(FONT_SIZE_BASE),
                 ]
                 .width(Length::Fill)
             )
@@ -172,7 +186,10 @@ impl Preview {
     }
 
     pub fn subscription(&self) -> Subscription<PreviewMessage> {
-        iced::time::every(iced::time::Duration::from_secs(1)).map(|_| PreviewMessage::UpdateTimeStr)
+        Subscription::batch([
+            iced::time::every(iced::time::Duration::from_secs(1)).map(|_| PreviewMessage::UpdateTimeStr),
+            self.log_viewer.subscription().map(PreviewMessage::LogView)
+        ])
     }
 
     pub fn generate_page_change_button(
@@ -205,84 +222,11 @@ impl Preview {
         .into()
     }
 
-   
-
-    pub fn generate_snapshot_component(&self) -> Element<'_, PreviewMessage> {
-        column![
-            row![
-                pick_list(
-                    self.snap_shot_index_state.as_slice(),
-                    self.current_snap_shot_index.as_ref(),
-                    PreviewMessage::ChangeSnapShot
-                )
-                .text_size(FONT_SIZE_SMALLER)
-                .text_line_height(1.)
-                .style(|theme: &Theme, _| {
-                    let ex_palette = theme.extended_palette();
-                    let palette = theme.palette();
-                    pick_list::Style {
-                        text_color: palette.text,
-                        background: Background::Color(ex_palette.background.weaker.color),
-                        border: Border::default(),
-                        placeholder_color: palette.text,
-                        handle_color: palette.text,
-                    }
-                })
-                .menu_style(|theme: &Theme| {
-                    let ex_palette = theme.extended_palette();
-                    let palette = theme.palette();
-                    menu::Style {
-                        background: Background::Color(ex_palette.background.weaker.color),
-                        selected_background: Background::Color(ex_palette.background.base.color),
-                        selected_text_color: palette.text,
-                        text_color: palette.text,
-                        border: Border::default(),
-                        shadow: SHADOW_BASE,
-                    }
-                }),
-                space::horizontal(),
-                mouse_area(text("恢复").size(FONT_SIZE_BIGGER))
-                    .interaction(mouse::Interaction::Pointer),
-                mouse_area(text("删除").size(FONT_SIZE_BIGGER))
-                    .interaction(mouse::Interaction::Pointer),
-                mouse_area(text("另存为").size(FONT_SIZE_BIGGER))
-                    .interaction(mouse::Interaction::Pointer)
-            ]
-            .spacing(SPACING_BIGGER)
-            .padding(Padding::from([PADDING_SMALLER, PADDING_BIGGER]))
-            .height(Length::Shrink),
-            rule::horizontal(1).style(|theme: &Theme| {
-                let ex_palette = theme.extended_palette();
-                rule::Style {
-                    color: ex_palette.background.weaker.color,
-                    radius: Radius::default(),
-                    snap: true,
-                    fill_mode: rule::FillMode::Full,
-                }
-            }),
-            text_editor(&self.current_snapshot_content)
-                .on_action(PreviewMessage::EditorAction)
-                .height(Length::Fill)
-                .padding(Padding::from([PADDING_SMALLER, PADDING_BIGGER]))
-                .style(|theme: &Theme, _| {
-                    let palette = theme.palette();
-                    text_editor::Style {
-                        background: Background::Color(Color::TRANSPARENT),
-                        border: Border::default(),
-                        placeholder: palette.text,
-                        value: palette.text,
-                        selection: palette.primary,
-                    }
-                })
-        ]
-        .into()
-    }
-
     pub fn get_time_str() -> String {
         let now = jiff::Zoned::now();
         now.strftime("%Y/%m/%d  %H:%M:%S").to_string()
     }
-    
+
     pub fn get_week_str() -> String {
         let weekday = jiff::Zoned::now().weekday();
         match weekday {

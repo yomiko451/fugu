@@ -3,11 +3,13 @@ use crate::{
     preview::{markdown, viewer::CustomViewer},
 };
 use iced::{
-    Element, Length, Padding, Task,
+    Element, Length, Padding, Task, Theme,
+    border::Radius,
+    mouse,
     widget::{
-        container, image,
+        column, container, image,
         markdown::{self as iced_markdown, Uri},
-        scrollable,
+        mouse_area, row, rule, scrollable, space, text,
     },
     window,
 };
@@ -86,17 +88,40 @@ impl Markdown {
 
     pub fn view(&self) -> Element<'_, MarkdownMessage> {
         let hidden_scroller = scrollable::Scrollbar::new().scroller_width(0).width(0);
-        container(
-            scrollable(iced_markdown::view_with(
-                self.content.items(),
-                DEFAULT_THEME.clone(),
-                &CustomViewer { image: &self.image },
-            ))
-            .direction(scrollable::Direction::Vertical(hidden_scroller)),
-        )
-        .height(Length::Fill)
-        .width(Length::Fill)
-        .padding(Padding::from([PADDING_SMALLER, PADDING_BIGGER]))
+        container(column![
+            row![
+                space::horizontal(),
+                mouse_area(text("恢复").size(FONT_SIZE_BIGGER))
+                    .interaction(mouse::Interaction::Pointer),
+                mouse_area(text("删除").size(FONT_SIZE_BIGGER))
+                    .interaction(mouse::Interaction::Pointer),
+                mouse_area(text("另存为").size(FONT_SIZE_BIGGER))
+                    .interaction(mouse::Interaction::Pointer)
+            ]
+            .spacing(SPACING_BIGGER)
+            .padding(Padding::from([PADDING_SMALLER, PADDING_BIGGER]))
+            .height(Length::Shrink),
+            rule::horizontal(1).style(|theme: &Theme| {
+                let ex_palette = theme.extended_palette();
+                rule::Style {
+                    color: ex_palette.background.weaker.color,
+                    radius: Radius::default(),
+                    snap: true,
+                    fill_mode: rule::FillMode::Full,
+                }
+            }),
+            container(
+                scrollable(iced_markdown::view_with(
+                    self.content.items(),
+                    DEFAULT_THEME.clone(),
+                    &CustomViewer { image: &self.image },
+                ))
+                .direction(scrollable::Direction::Vertical(hidden_scroller))
+            )
+            .height(Length::Fill)
+            .width(Length::Fill)
+            .padding(Padding::from([PADDING_SMALLER, PADDING_BIGGER]))
+        ])
         .into()
     }
 }

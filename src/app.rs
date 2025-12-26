@@ -33,7 +33,7 @@ pub enum AppMessage {
 
 impl App {
     pub fn new() -> (Self, Task<AppMessage>) {
-        // 初始化日志
+        //初始化日志
         // let file_appender = rolling::daily("logs", "app.log");
         // let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
 
@@ -42,11 +42,11 @@ impl App {
         //     .with_ansi(false)
         //     .with_writer(non_blocking)
         //     .init();
-        //
-        tracing_subscriber::fmt()
-            .with_env_filter(EnvFilter::new("fugu=info"))
-            .init();
-        info!("应用启动！");
+        
+        // tracing_subscriber::fmt()
+        //     .with_env_filter(EnvFilter::new("fugu=info"))
+        //     .init();
+        // info!("应用启动！");
         let app = Self {
             editor: Editor::new(),
             preview: Preview::new(),

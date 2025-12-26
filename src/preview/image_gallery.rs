@@ -142,7 +142,7 @@ impl ImageGallery {
                                 );
                             }
 
-                            (row![space::horizontal(), radio_a, radio_b], body.into())
+                            (row![text!("共 {} 张图片", self.images.len()).size(FONT_SIZE_BIGGER), space::horizontal(), radio_a, radio_b], body.into())
                         }
                         ImageGalleryMode::ListView => {
                             let body: Element<'_, ImageGalleryMessage> = if let Some(handle) =
