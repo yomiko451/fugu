@@ -1,13 +1,11 @@
-use std::{collections::HashMap, sync::LazyLock};
-
 use iced::{
-    Background, Element, Font, Length, Padding, Pixels, Renderer, Theme, alignment, padding,
-    widget::{
+    Background, Border, Color, Element, Font, Length, Padding, Pixels, Renderer, Theme, alignment, border::Radius, padding, widget::{
         center_x, checkbox, column, container, image,
-        markdown::{self as iced_markdown, Bullet, Highlight},
-        rich_text, row, space, text,
-    },
+        markdown::{self as iced_markdown, Bullet, Highlight, Row},
+        rich_text, row, rule, scrollable, space, table, text,
+    }
 };
+use std::{collections::HashMap, sync::LazyLock};
 
 use crate::{common::*, preview::markdown::MarkdownMessage};
 
@@ -20,10 +18,10 @@ pub const CUSTOM_SETTINGS: LazyLock<iced_markdown::Settings> = LazyLock::new(|| 
         inline_code_color: palette.success,
         code_block_font: Font::default(),
         link_color: palette.success,
-        inline_code_padding: padding::left(10).right(10),
+        inline_code_padding: Padding::ZERO,
         inline_code_highlight: Highlight {
-            background: Background::Color(ex_palette.background.weaker.color),
-            border: DEFAULT_BORDER,
+            background: Background::Color(Color::TRANSPARENT),
+            border: Border::default(),
         },
     })
 });
@@ -60,7 +58,8 @@ impl<'a> iced_markdown::Viewer<'a, MarkdownMessage> for CustomViewer<'a> {
     ) -> Element<'a, MarkdownMessage, Theme, Renderer> {
         container(column![
             row![
-                text!("语言 {}", language.unwrap_or("文本")).color(DEFAULT_THEME.palette().text),
+                space::horizontal(),
+                text!("语言 {}", language.unwrap_or("文本")).color(CODE_BLOCK_TEXT_COLOR),
                 text!(
                     "行数 {}",
                     if lines.is_empty() {
@@ -69,7 +68,8 @@ impl<'a> iced_markdown::Viewer<'a, MarkdownMessage> for CustomViewer<'a> {
                         lines.len().to_string()
                     }
                 )
-                .color(DEFAULT_THEME.palette().text)
+                .color(CODE_BLOCK_TEXT_COLOR),
+                space::horizontal(),
             ]
             .spacing(SPACING)
             .padding(padding::bottom(PADDING_SMALLER)),
@@ -81,10 +81,14 @@ impl<'a> iced_markdown::Viewer<'a, MarkdownMessage> for CustomViewer<'a> {
         ])
         .width(Length::Fill)
         .padding(Padding::from([PADDING_BASE, PADDING_BIGGER]))
-        .style(|theme: &Theme| {
+        .style(move |theme: &Theme| {
             let palette = theme.palette();
             container::Style {
-                text_color: Some(palette.text),
+                text_color: if language.is_none() {
+                    Some(CODE_BLOCK_TEXT_COLOR)
+                } else {
+                    Some(palette.text)
+                },
                 background: Some(Background::Color(palette.background)),
                 border: DEFAULT_BORDER,
                 ..Default::default()
@@ -133,87 +137,61 @@ impl<'a> iced_markdown::Viewer<'a, MarkdownMessage> for CustomViewer<'a> {
         .into()
     }
 
-    fn unordered_list(
+    fn quote(
         &self,
         settings: iced_markdown::Settings,
-        bullets: &'a [iced_markdown::Bullet],
+        contents: &'a [iced_markdown::Item],
     ) -> Element<'a, MarkdownMessage, Theme, Renderer> {
         container(
-            column(bullets.iter().map(|bullet| {
-                let (items, mark) = match bullet {
-                    Bullet::Point { items } => (items, text("•").size(settings.text_size).into()),
-                    Bullet::Task { items, done, .. } => (
-                        items,
-                        Element::from(
-                            container(checkbox(*done).size(settings.text_size)).center_y(
-                                text::LineHeight::default().to_absolute(settings.text_size),
-                            ),
-                        ),
-                    ),
-                };
-                row![
-                    mark,
-                    iced_markdown::view_with(
-                        items,
-                        iced_markdown::Settings {
-                            spacing: settings.spacing * 0.6,
-                            ..settings
-                        },
-                        self
-                    ),
-                ]
-                .spacing(settings.spacing)
-                .into()
-            }))
-            .spacing(settings.spacing * 0.75)
-            .padding([0.0, settings.spacing.0]),
+            row![
+                rule::vertical(6).style(|theme: &Theme| {
+                    let ex_palette = theme.extended_palette();
+                    rule::Style {
+                        color: ex_palette.background.weaker.color,
+                        radius: Radius::from(3),
+                        snap: true,
+                        fill_mode: rule::FillMode::Full,
+                    }
+                }),
+                column(
+                    contents
+                        .iter()
+                        .enumerate()
+                        .map(|(i, content)| iced_markdown::item(self, settings, content, i)),
+                )
+                .spacing(settings.spacing.0),
+            ]
+            .height(Length::Shrink)
+            .spacing(settings.spacing.0),
         )
         .style(|_| container::Style {
-            text_color: Some(UNORDERED_LSIT_COLOR),
+            text_color: Some(QUOTE_MARK_COLOR),
             ..Default::default()
         })
         .into()
     }
 
-    fn ordered_list(
+    fn table(
         &self,
         settings: iced_markdown::Settings,
-        start: u64,
-        bullets: &'a [Bullet],
+        columns: &'a [iced_markdown::Column],
+        rows: &'a [iced_markdown::Row],
     ) -> Element<'a, MarkdownMessage, Theme, Renderer> {
-        let digits = ((start + bullets.len() as u64).max(1) as f32)
-            .log10()
-            .ceil();
+        let table = iced_markdown::table(self, settings, columns, rows);
 
-        container(
-            column(bullets.iter().enumerate().map(|(i, bullet)| {
-                let items = match bullet {
-                    Bullet::Point { items } => items,
-                    Bullet::Task { items, .. } => items,
-                };
-                row![
-                    text!("{}.", i as u64 + start)
-                        .size(settings.text_size)
-                        .align_x(alignment::Horizontal::Right)
-                        .width(settings.text_size * ((digits / 2.0).ceil() + 1.0)),
-                    iced_markdown::view_with(
-                        items,
-                        iced_markdown::Settings {
-                            spacing: settings.spacing * 0.6,
-                            ..settings
-                        },
-                        self,
-                    )
-                ]
-                .spacing(settings.spacing)
-                .into()
-            }))
-            .spacing(settings.spacing * 0.75),
-        )
-        .style(|_| container::Style {
-            text_color: Some(ORDERED_LSIT_COLOR),
-            ..Default::default()
-        })
-        .into()
+        container(table)
+            .style(|theme: &Theme| {
+                let palette = theme.palette();
+                container::Style {
+                    border: Border {
+                        width: 1.,
+                        color: palette.text,
+                        ..DEFAULT_BORDER
+                    },
+                    ..Default::default()
+                }
+            })
+            .padding(PADDING_SMALLEST)
+            .into()
     }
 }

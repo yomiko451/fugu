@@ -19,3 +19,5 @@ LoadFileTree不要用tree.unwrap，改改类型
 
 搜索功能放在文件模块还是编辑器模块？
 大纲功能放在哪个模块？
+
+关注以后api改动是否影响md列表样式自定义，行内代码padding解决

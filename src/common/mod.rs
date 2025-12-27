@@ -150,7 +150,8 @@ pub const H4_COLOR: Color = Color::from_rgb8(86, 182, 194);
 pub const H5_COLOR: Color = Color::from_rgb8(199, 199, 199);
 pub const H6_COLOR: Color = Color::from_rgb8(150, 150, 150);
 pub const ORDERED_LSIT_COLOR: Color = Color::from_rgb8(209, 154, 102);
-pub const UNORDERED_LSIT_COLOR: Color = Color::from_rgb8(152, 195, 121);
+pub const CODE_BLOCK_TEXT_COLOR: Color = Color::from_rgb8(152, 195, 121);
+pub const QUOTE_MARK_COLOR: Color = Color::from_rgb8(224, 108, 117);
 // 预览区相关常量
 //pub const PREVIEW_BG_COLOR: Color = Color::from_rgb8(47, 52, 62);
 
