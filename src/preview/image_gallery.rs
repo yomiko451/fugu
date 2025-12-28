@@ -7,7 +7,7 @@ use iced::{
     mouse,
     overlay::menu,
     widget::{
-        Grid, Row, center, center_x, column, container, image, mouse_area, pick_list, radio, row,
+        Grid, Row, center, center_x, column, container, image as iced_image, mouse_area, pick_list, radio, row,
         rule, scrollable, space, text,
     },
 };
@@ -15,9 +15,9 @@ use tracing::info;
 
 #[derive(Debug, Default)]
 pub struct ImageGallery {
-    selected_img_name: Option<String>,
+    selected_option_item: Option<OptionItem>,
     mode: Option<ImageGalleryMode>,
-    images: HashMap<String, image::Handle>,
+    images: HashMap<u32, ImgData>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,11 +26,21 @@ pub enum ImageGalleryMode {
     ListView,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OptionItem(u32);
+
+impl std::fmt::Display for OptionItem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "图片 {}", self.0)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum ImageGalleryMessage {
     LoadImage(Vec<ImgData>),
     ModeChange(ImageGalleryMode),
-    ChangeSelectedImg(String),
+    ChangeSelectedImg(u32),
+    SendImgDataToEditor(u32),
     ShowImageGallery,
 }
 
@@ -40,27 +50,30 @@ impl ImageGallery {
         image_gallery_message: ImageGalleryMessage,
     ) -> Task<ImageGalleryMessage> {
         match image_gallery_message {
-            ImageGalleryMessage::LoadImage(image_data) => {
+            ImageGalleryMessage::LoadImage(mut image_data) => {
                 let image_count = image_data.len();
                 if image_count == 1 {
                     let image = image_data
                         .into_iter()
                         .next()
                         .expect("必定有一个元素不应当出错!");
-                    self.selected_img_name = Some(image.name.clone());
-                    self.images.entry(image.name).or_insert_with(|| {
+                    self.selected_option_item = Some(OptionItem(image.indep_id));
+                    self.images.entry(image.indep_id).or_insert_with(|| {
                         info!("图片载入成功!");
-                        image.handle
+                        image
                     });
-                    self.mode = Some(ImageGalleryMode::ListView);
+                    if self.mode == Some(ImageGalleryMode::GridView) {
+                        self.mode = Some(ImageGalleryMode::ListView);
+                    }
                     return Task::done(ImageGalleryMessage::ShowImageGallery);
                 } else if image_count > 1 {
-                    self.selected_img_name =
-                        Some(image_data.first().expect("必定不出错!").name.clone());
+                    image_data.sort_by_key(|image| image.indep_id);
+                    self.selected_option_item =
+                        Some(OptionItem(image_data.first().expect("必定不出错!").indep_id));
                     for image in image_data {
-                        self.images.entry(image.name).or_insert_with(|| {
+                        self.images.entry(image.indep_id).or_insert_with(|| {
                             info!("图片插入插入成功!");
-                            image.handle
+                            image
                         });
                     }
                     self.mode = Some(ImageGalleryMode::GridView);
@@ -68,8 +81,11 @@ impl ImageGallery {
                 }
                 Task::none()
             }
-            ImageGalleryMessage::ChangeSelectedImg(img_name) => {
-                self.selected_img_name = Some(img_name);
+            ImageGalleryMessage::ChangeSelectedImg(id) => {
+                self.selected_option_item = Some(OptionItem(id));
+                if self.mode == Some(ImageGalleryMode::GridView) {
+                    self.mode = Some(ImageGalleryMode::ListView);
+                }
                 Task::none()
             }
             ImageGalleryMessage::ModeChange(mode) => {
@@ -126,40 +142,58 @@ impl ImageGallery {
                                 .columns(2)
                                 .spacing(SPACING_BIGGER)
                                 .height(Length::Shrink);
-                            let mut images = self.images.iter().collect::<Vec<_>>();
-                            images.sort_by_key(|image| image.0);
-                            for (name, handle) in images {
-                                let image = image(handle).content_fit(iced::ContentFit::Contain);
+                            let mut images = self.images.values().collect::<Vec<_>>();
+                            images.sort_by_key(|image| image.indep_id);
+                            for image in images {
+                                let image_ele = iced_image(image.handle.clone()).content_fit(iced::ContentFit::Contain);
                                 body = body.push(
                                     column![
-                                        text(name)
+                                        text!("图片 {}", image.indep_id)
                                             .size(FONT_SIZE_SMALLER)
                                             .width(Length::Fill)
                                             .align_x(Alignment::Center),
-                                        image
+                                        mouse_area(image_ele)
+                                            .interaction(mouse::Interaction::Pointer)
+                                            .on_press(ImageGalleryMessage::ChangeSelectedImg(
+                                                image.indep_id
+                                            ))
                                     ]
                                     .spacing(SPACING_SMALLER),
                                 );
                             }
 
-                            (row![text!("共 {} 张图片", self.images.len()).size(FONT_SIZE_BIGGER), space::horizontal(), radio_a, radio_b], body.into())
+                            (
+                                row![
+                                    text!("共 {} 张图片", self.images.len()).size(FONT_SIZE_BIGGER),
+                                    space::horizontal(),
+                                    radio_a,
+                                    radio_b
+                                ],
+                                body.into(),
+                            )
                         }
                         ImageGalleryMode::ListView => {
-                            let body: Element<'_, ImageGalleryMessage> = if let Some(handle) =
-                                self.selected_img_name
-                                    .as_ref()
-                                    .and_then(|key| self.images.get(key))
+                            let body: Element<'_, ImageGalleryMessage> = if let Some(image) = self
+                                .selected_option_item
+                                .as_ref()
+                                .and_then(|item| self.images.get(&item.0))
                             {
-                                center(image(handle).content_fit(iced::ContentFit::Contain)).into()
+                                center(mouse_area(
+                                    iced_image(image.handle.clone()).content_fit(iced::ContentFit::Contain),
+                                ).interaction(mouse::Interaction::Pointer)
+                                .on_press(ImageGalleryMessage::SendImgDataToEditor(
+                                    image.global_id
+                                )))
+                                .into()
                             } else {
                                 space().into()
                             };
-                            let mut options = self.images.keys().into_iter().collect::<Vec<_>>();
-                            options.sort();
+                            let mut options = self.images.keys().map(|id| OptionItem(*id)).collect::<Vec<_>>();
+                            options.sort_by_key(|item| item.0);
                             let pick_list =
-                                pick_list(options, self.selected_img_name.as_ref(), |name| {
-                                    ImageGalleryMessage::ChangeSelectedImg(name.to_string())
-                                })
+                                pick_list(options, self.selected_option_item.as_ref(), 
+                                    |item|ImageGalleryMessage::ChangeSelectedImg(item.0)
+                                )
                                 .text_size(FONT_SIZE_SMALLER)
                                 .text_line_height(1.)
                                 .style(|theme: &Theme, _| {
@@ -192,10 +226,7 @@ impl ImageGallery {
                                     }
                                 });
 
-                            (
-                                row![pick_list, space::horizontal(), radio_a, radio_b],
-                                body,
-                            )
+                            (row![pick_list, space::horizontal(), radio_a, radio_b], body)
                         }
                     }
                 }
@@ -221,11 +252,9 @@ impl ImageGallery {
                     fill_mode: rule::FillMode::Full,
                 }
             }),
-            container(
-                scrollable(body).direction(scrollable::Direction::Vertical(hidden_scroller))
-            )
-            .height(Length::Fill)
-            .padding(Padding::from([PADDING_BASE, PADDING_BIGGER]))
+            container(scrollable(body).direction(scrollable::Direction::Vertical(hidden_scroller)))
+                .height(Length::Fill)
+                .padding(Padding::from([PADDING_BASE, PADDING_BIGGER]))
         ])
         .into()
     }

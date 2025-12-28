@@ -85,7 +85,7 @@ impl FileTree {
                             img_name,
                             NodeContent::Image(ImageFile {
                                 path,
-                                name: format!("图片 {}", operation::get_next_img_id()),
+                                indep_id: operation::get_next_img_id(),
                                 cache: handle,
                             }),
                         );
@@ -124,11 +124,11 @@ impl FileTree {
                         img_node
                             .try_get_img()
                             .ok()
-                            .map(|img_file| (img_file, img_node.id))
+                            .map(|img_file| (img_file, img_node.global_id))
                     })
                     .map(|(img_file, id)| ImgData {
-                        id,
-                        name: img_file.name.clone(),
+                        global_id: id,
+                        indep_id: img_file.indep_id.clone(),
                         handle: img_file.cache.clone(),
                     })
                     .collect::<Vec<ImgData>>();
@@ -138,13 +138,13 @@ impl FileTree {
             }
             FileTreeMessage::InsertToFileTree(file_node) => {
                 if file_node.is_md_file() {
-                    self.insert_node_to_temp_workplace(vec![file_node.id]);
+                    self.insert_node_to_temp_workplace(vec![file_node.global_id]);
                 } else {
                     // 通过前置逻辑可知必定是图片无需再次判断
-                    self.insert_node_to_temp_img_library(vec![file_node.id]);
+                    self.insert_node_to_temp_img_library(vec![file_node.global_id]);
                 };
-                let file_node_id = file_node.id;
-                self.all_nodes.insert(file_node.id, file_node);
+                let file_node_id = file_node.global_id;
+                self.all_nodes.insert(file_node.global_id, file_node);
                 Task::done(FileTreeMessage::ChangeSelectedNode(file_node_id))
             }
             FileTreeMessage::ChangeHoveredNode(id) => {
@@ -170,12 +170,12 @@ impl FileTree {
                 .selected_node_id
                 .and_then(|key| self.all_nodes.get(&key))
                 .map(|node| {
-                    let id = node.id;
+                    let id = node.global_id;
                     if node.is_img_file() {
                         if let Ok(img_file) = node.try_get_img() {
                             let image_data = ImgData {
-                                id,
-                                name: img_file.name.clone(),
+                                global_id: id,
+                                indep_id: img_file.indep_id,
                                 handle: img_file.cache.clone(),
                             };
                             return Task::done(FileTreeMessage::SendImgDataToPreview(vec![
@@ -191,7 +191,7 @@ impl FileTree {
                         }) = node.try_get_md()
                         {
                             let file_data = FileData {
-                                id,
+                                global_id: id,
                                 version: *version,
                                 content: Arc::clone(cache),
                             };
@@ -232,7 +232,7 @@ impl FileTree {
                         md_file.cache = Some(Arc::clone(&content));
                     }
                     let file_data = FileData {
-                        id: selected_node.id,
+                        global_id: selected_node.global_id,
                         version: 0,
                         content: Arc::clone(&content),
                     };
@@ -246,7 +246,7 @@ impl FileTree {
             // 保存前先更新节点数据
             FileTreeMessage::UpdateNodeInfo(is_auto_save, file_data) => self
                 .all_nodes
-                .get_mut(&file_data.id)
+                .get_mut(&file_data.global_id)
                 .and_then(|node| node.try_get_md_mut().ok())
                 .map(|md_file| {
                     md_file.version = file_data.version;
@@ -267,7 +267,7 @@ impl FileTree {
                 ))),
             FileTreeMessage::UpdateNodePath(path, file_data) => self
                 .all_nodes
-                .get_mut(&file_data.id)
+                .get_mut(&file_data.global_id)
                 .map(|node| {
                     node.name = operation::get_file_name(&path);
                     if let NodeContent::Markdown(MdFile {
@@ -286,7 +286,7 @@ impl FileTree {
                 ))),
             FileTreeMessage::SaveAs(file_data) => self
                 .all_nodes
-                .get(&file_data.id)
+                .get(&file_data.global_id)
                 .map(|node| {
                     let is_tmp_file = node.is_temp_file();
                     Task::perform(
@@ -382,7 +382,7 @@ impl FileTree {
                         expanded: true,
                     }),
                 );
-                let temp_workplace_id = temp_workplace_root_node.id;
+                let temp_workplace_id = temp_workplace_root_node.global_id;
                 self.all_nodes
                     .insert(temp_workplace_id, temp_workplace_root_node);
                 self.temp_workplace_root_key = Some(temp_workplace_id);
@@ -411,7 +411,7 @@ impl FileTree {
                         expanded: true,
                     }),
                 );
-                let temp_img_library_id = temp_img_library_root_node.id;
+                let temp_img_library_id = temp_img_library_root_node.global_id;
                 self.all_nodes
                     .insert(temp_img_library_id, temp_img_library_root_node);
                 self.temp_img_library_root_key = Some(temp_img_library_id);

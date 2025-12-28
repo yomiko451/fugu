@@ -36,7 +36,7 @@ pub struct IsAutoSave(pub bool);
 
 #[derive(Debug, Clone)]
 pub struct FileNode {
-    pub id: u32,
+    pub global_id: u32,
     pub name: String,
     pub node_content: NodeContent,
 }
@@ -44,7 +44,7 @@ pub struct FileNode {
 impl FileNode {
     pub fn new(name: String, node_content: NodeContent) -> Self {
         FileNode {
-            id: get_next_id(),
+            global_id: get_next_id(),
             name,
             node_content,
         }
@@ -243,7 +243,7 @@ pub struct MdFile {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ImageFile {
     pub path: PathBuf,
-    pub name: String,
+    pub indep_id: u32,
     pub cache: image::Handle,
 }
 
@@ -332,9 +332,9 @@ pub async fn fetch_file_tree(
         expanded: true,
     });
     let root_node = FileNode::new(root_node_name, root_node_content);
-    let root_node_key = root_node.id;
-    let mut node_index_stack = vec![(root_path, root_node.id)];
-    all_nodes.insert(root_node.id, root_node);
+    let root_node_key = root_node.global_id;
+    let mut node_index_stack = vec![(root_path, root_node.global_id)];
+    all_nodes.insert(root_node.global_id, root_node);
 
     while let Some((path, key)) = node_index_stack.pop() {
         let mut dir = tokio::fs::read_dir(path).await?;
@@ -354,9 +354,9 @@ pub async fn fetch_file_tree(
 
                     let child_node = FileNode::new(child_node_name, child_node_content);
                     if let Some(file_node) = all_nodes.get_mut(&key) {
-                        file_node.try_get_children_mut()?.push(child_node.id);
+                        file_node.try_get_children_mut()?.push(child_node.global_id);
                     }
-                    all_nodes.insert(child_node.id, child_node);
+                    all_nodes.insert(child_node.global_id, child_node);
                 } else {
                     continue;
                 }
@@ -369,11 +369,11 @@ pub async fn fetch_file_tree(
                 });
 
                 let child_node = FileNode::new(child_node_name, child_node_content);
-                node_index_stack.push((path, child_node.id));
+                node_index_stack.push((path, child_node.global_id));
                 if let Some(file_node) = all_nodes.get_mut(&key) {
-                    file_node.try_get_children_mut()?.push(child_node.id);
+                    file_node.try_get_children_mut()?.push(child_node.global_id);
                 }
-                all_nodes.insert(child_node.id, child_node);
+                all_nodes.insert(child_node.global_id, child_node);
             }
         }
     }
@@ -398,11 +398,11 @@ pub async fn fetch_img_handle(root_path: PathBuf) -> Result<HashMap<u32, FileNod
                     let img_node_name = get_file_name(&path);
                     let img_node_content = NodeContent::Image(ImageFile {
                         path,
-                        name: format!("图片 {}", get_next_img_id()),
+                        indep_id: get_next_img_id(),
                         cache: handle,
                     });
                     let file_node = FileNode::new(img_node_name, img_node_content);
-                    img_nodes.insert(file_node.id, file_node);
+                    img_nodes.insert(file_node.global_id, file_node);
                 }
             } else {
                 path_stack.push(path);
@@ -478,9 +478,9 @@ pub fn view_node(
         .width(Length::Fill)
         .style(move |theme: &Theme| {
             let ex_palette = theme.extended_palette();
-            let bg = if selected_id == Some(node.id) {
+            let bg = if selected_id == Some(node.global_id) {
                 ex_palette.background.strong.color.scale_alpha(0.75)
-            } else if hovered_id == Some(node.id) {
+            } else if hovered_id == Some(node.global_id) {
                 ex_palette.background.weaker.color
             } else {
                 Color::TRANSPARENT
@@ -492,8 +492,8 @@ pub fn view_node(
         }),
     )
     .interaction(mouse::Interaction::Pointer)
-    .on_press(FileTreeMessage::ChangeSelectedNode(node.id))
-    .on_enter(FileTreeMessage::ChangeHoveredNode(node.id));
+    .on_press(FileTreeMessage::ChangeSelectedNode(node.global_id))
+    .on_enter(FileTreeMessage::ChangeHoveredNode(node.global_id));
 
     match children_node_view {
         Some(children) => column![node_view, children],
