@@ -11,7 +11,10 @@ use iced::{
 use std::collections::VecDeque;
 use tokio::sync::mpsc::UnboundedSender;
 use tracing::info;
-use tracing_subscriber::{EnvFilter, fmt::{MakeWriter, time::ChronoLocal}};
+use tracing_subscriber::{
+    EnvFilter,
+    fmt::{MakeWriter, time::ChronoLocal},
+};
 
 static LOG_SENDER: OnceLock<UnboundedSender<String>> = OnceLock::new();
 
@@ -84,12 +87,9 @@ impl LogViewer {
     pub fn view(&self) -> Element<'_, LogViewerMessage> {
         container(column![
             row![
+                text!("共 {}/100 条日志", self.log.len()).size(FONT_SIZE_BIGGER),
                 space::horizontal(),
-                mouse_area(text("恢复").size(FONT_SIZE_BIGGER))
-                    .interaction(mouse::Interaction::Pointer),
-                mouse_area(text("删除").size(FONT_SIZE_BIGGER))
-                    .interaction(mouse::Interaction::Pointer),
-                mouse_area(text("另存为").size(FONT_SIZE_BIGGER))
+                mouse_area(text("导出日志").size(FONT_SIZE_BIGGER))
                     .interaction(mouse::Interaction::Pointer)
             ]
             .spacing(SPACING_BIGGER)
@@ -105,11 +105,10 @@ impl LogViewer {
                 }
             }),
             container(scrollable(
-                Column::from_vec(
+                column(
                     self.log
                         .iter()
                         .map(|log_item| { text(log_item).size(FONT_SIZE_SMALLER).into() })
-                        .collect()
                 )
                 .width(Length::Fill)
                 .spacing(SPACING_SMALLER)

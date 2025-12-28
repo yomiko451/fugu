@@ -52,7 +52,6 @@ impl Markdown {
                         })
                         .cloned()
                         .collect::<Vec<iced_markdown::Uri>>();
-                    info!("文件内容渲染成功!");
                     return Task::done(MarkdownMessage::HandleImageUrl(url_vec));
                 }
                 Task::none()
