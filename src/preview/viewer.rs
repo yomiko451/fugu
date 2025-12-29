@@ -5,7 +5,7 @@ use iced::{
         rich_text, row, rule, scrollable, space, table, text,
     }
 };
-use std::{collections::HashMap, sync::LazyLock};
+use std::{collections::HashMap, path::PathBuf, sync::LazyLock};
 
 use crate::{common::*, preview::markdown::MarkdownMessage};
 
@@ -27,7 +27,7 @@ pub const CUSTOM_SETTINGS: LazyLock<iced_markdown::Settings> = LazyLock::new(|| 
 });
 
 pub struct CustomViewer<'a> {
-    pub image: &'a HashMap<iced_markdown::Uri, image::Handle>,
+    pub image: &'a HashMap<String, image::Handle>,
 }
 
 impl<'a> iced_markdown::Viewer<'a, MarkdownMessage> for CustomViewer<'a> {

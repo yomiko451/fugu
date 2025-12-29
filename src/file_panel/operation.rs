@@ -413,6 +413,23 @@ pub async fn fetch_img_handle(root_path: PathBuf) -> Result<HashMap<u32, FileNod
     Ok(img_nodes)
 }
 
+pub async fn copy_img_to_folder(md_path: PathBuf, img_path: PathBuf) -> Result<String, AppError> {
+    let parent_path = md_path.parent().expect("必定合法路径不应当出错!");
+    let img_folder_path = parent_path.join("fugu-images");
+    let img_file_name = img_path.file_name().expect("必定合法路径不应当出错!");
+    let new_img_path = img_folder_path.join(img_file_name);
+    if tokio::fs::try_exists(&img_folder_path).await? {
+        if !tokio::fs::try_exists(&new_img_path).await? {
+            tokio::fs::copy(&img_path, &new_img_path).await?;
+        }
+    } else {
+        tokio::fs::create_dir(img_folder_path).await?;
+        tokio::fs::copy(&img_path, &new_img_path).await?;
+    }
+    let code = format!("![](fugu-images/{})\n\n", img_file_name.to_string_lossy());
+    Ok(code)
+}
+
 // 递归渲染节点树
 pub fn view_node(
     hovered_id: Option<u32>,

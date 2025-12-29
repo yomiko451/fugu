@@ -35,11 +35,14 @@ pub enum FileTreeMessage {
     SaveAs(FileData),
     ReturnSaveResult(Result<(), AppError>),
     SendFileDataToEditor(FileData),
+    SendImgCodeToEditor(String),
     SendImgDataToPreview(Vec<ImgData>),
+    SendImgBasePathToPreview(PathBuf),
     CreateMdCache(String, u32),
     UpdateNodePath(PathBuf, FileData),
     UpdateNodeInfo(IsAutoSave, FileData),
     HandleError(AppError),
+    CopyImgFileData(u32),
 }
 
 impl FileTree {
@@ -166,10 +169,11 @@ impl FileTree {
                     )))
                 }
             }
-            FileTreeMessage::LoadSelectedNodeData => self
-                .selected_node_id
-                .and_then(|key| self.all_nodes.get(&key))
-                .map(|node| {
+            FileTreeMessage::LoadSelectedNodeData => {
+                if let Some(node) = self
+                    .selected_node_id
+                    .and_then(|key| self.all_nodes.get(&key))
+                {
                     let id = node.global_id;
                     if node.is_img_file() {
                         if let Ok(img_file) = node.try_get_img() {
@@ -182,12 +186,11 @@ impl FileTree {
                                 image_data,
                             ]));
                         }
-                        return Task::none();
                     } else {
                         if let Ok(MdFile {
                             version,
                             cache: Some(cache),
-                            ..
+                            path: Some(path),
                         }) = node.try_get_md()
                         {
                             let file_data = FileData {
@@ -195,7 +198,10 @@ impl FileTree {
                                 version: *version,
                                 content: Arc::clone(cache),
                             };
-                            return Task::done(FileTreeMessage::SendFileDataToEditor(file_data));
+                            return Task::done(FileTreeMessage::SendFileDataToEditor(file_data))
+                                .chain(Task::done(FileTreeMessage::SendImgBasePathToPreview(
+                                    path.clone(),
+                                )));
                         } else {
                             if let Ok(path) = node.try_get_path() {
                                 return Task::perform(
@@ -209,34 +215,51 @@ impl FileTree {
                                     },
                                 );
                             } else {
-                                return Task::done(FileTreeMessage::CreateMdCache(
-                                    String::default(),
-                                    id,
-                                ));
+                                if let Ok(MdFile {
+                                    version,
+                                    path: None,
+                                    ..
+                                }) = node.try_get_md()
+                                {
+                                    let new_file_data = FileData {
+                                        global_id: node.global_id,
+                                        version: *version,
+                                        content: Arc::new(String::default()),
+                                    };
+                                    return Task::done(FileTreeMessage::SendFileDataToEditor(
+                                        new_file_data,
+                                    ));
+                                }
                             }
                         }
                     }
-                })
-                .unwrap_or(Task::done(FileTreeMessage::HandleError(
-                    AppError::FilePanelError(
-                        "[FileTree-LoadSelectedNodeData]:载入指定id节点内容失败!".to_string(),
-                    ),
-                ))),
+                };
+                Task::done(FileTreeMessage::HandleError(AppError::FilePanelError(
+                    "[FileTree-LoadSelectedNodeData]:载入指定id节点内容失败!".to_string(),
+                )))
+            }
             // 加载内容后，发送内容到editor前，预留缓存省去二次加载
             FileTreeMessage::CreateMdCache(content, id) => self
                 .all_nodes
                 .get_mut(&id)
-                .map(|selected_node| {
+                .and_then(|node| node.try_get_md_mut().ok())
+                .map(|md_file| {
                     let content = Arc::new(content);
-                    if let Ok(md_file) = selected_node.try_get_md_mut() {
-                        md_file.cache = Some(Arc::clone(&content));
-                    }
+                    md_file.cache = Some(Arc::clone(&content));
                     let file_data = FileData {
-                        global_id: selected_node.global_id,
+                        global_id: id,
                         version: 0,
                         content: Arc::clone(&content),
                     };
-                    Task::done(FileTreeMessage::SendFileDataToEditor(file_data))
+                    Task::done(FileTreeMessage::SendFileDataToEditor(file_data)).chain(Task::done(
+                        FileTreeMessage::SendImgBasePathToPreview(
+                            md_file
+                                .path
+                                .as_ref()
+                                .expect("前置逻辑必定合法路径不会出错!")
+                                .clone(),
+                        ),
+                    ))
                 })
                 .unwrap_or(Task::done(FileTreeMessage::HandleError(
                     AppError::FilePanelError(
@@ -265,7 +288,7 @@ impl FileTree {
                         "[FileTree-UpdateNodeInfo]:更新节点内容失败!".to_string(),
                     ),
                 ))),
-            FileTreeMessage::UpdateNodePath(path, file_data) => self
+            FileTreeMessage::UpdateNodePath(path, mut file_data) => self
                 .all_nodes
                 .get_mut(&file_data.global_id)
                 .map(|node| {
@@ -277,7 +300,8 @@ impl FileTree {
                     {
                         *file_path = Some(path.clone())
                     }
-                    Task::done(FileTreeMessage::SaveFile(path, file_data.content))
+                    Task::done(FileTreeMessage::SaveFile(path, file_data.content.clone()))
+                        .chain(Task::done(FileTreeMessage::SendFileDataToEditor(file_data)))
                 })
                 .unwrap_or(Task::done(FileTreeMessage::HandleError(
                     AppError::FilePanelError(
@@ -321,6 +345,43 @@ impl FileTree {
                 info!("{}", error.to_string());
                 Task::none()
             }
+            FileTreeMessage::CopyImgFileData(id) => {
+                if let Some(md_node) = self
+                    .selected_node_id
+                    .and_then(|selected_id| self.all_nodes.get(&selected_id))
+                {
+                    if md_node.is_temp_file() {
+                        // 新文件没有路径必须保存一次确定路径才能插入图片
+                        // 弹窗询问用户如何操作
+                        // TODO
+                        
+                    } else {
+                        if let Some((md_path, img_path)) =
+                            md_node.try_get_path().ok().and_then(|md_path| {
+                                self.all_nodes
+                                    .get(&id)
+                                    .and_then(|img_node| img_node.try_get_path().ok())
+                                    .map(|img_path| (md_path, img_path))
+                            })
+                        {
+                            return Task::perform(
+                                operation::copy_img_to_folder(
+                                    md_path.to_owned(),
+                                    img_path.to_owned(),
+                                ),
+                                |result| match result {
+                                    Ok(code) => FileTreeMessage::SendImgCodeToEditor(code),
+                                    Err(error) => FileTreeMessage::HandleError(error),
+                                },
+                            );
+                        }
+                    }
+                }
+                Task::done(FileTreeMessage::HandleError(AppError::FilePanelError(
+                    "[FileTree-CopyImgFileData]:图片数据复制失败!".to_string(),
+                )))
+            }
+
             _ => Task::none(),
         }
     }

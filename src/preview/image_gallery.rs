@@ -40,7 +40,7 @@ pub enum ImageGalleryMessage {
     LoadImage(Vec<ImgData>),
     ModeChange(ImageGalleryMode),
     ChangeSelectedImg(u32),
-    SendImgDataToEditor(u32),
+    SendImgIdToFilePanel(u32),
     ShowImageGallery,
 }
 
@@ -181,7 +181,7 @@ impl ImageGallery {
                                 center(mouse_area(
                                     iced_image(image.handle.clone()).content_fit(iced::ContentFit::Contain),
                                 ).interaction(mouse::Interaction::Pointer)
-                                .on_press(ImageGalleryMessage::SendImgDataToEditor(
+                                .on_press(ImageGalleryMessage::SendImgIdToFilePanel(
                                     image.global_id
                                 )))
                                 .into()

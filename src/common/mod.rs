@@ -1,4 +1,4 @@
-use std::sync::{Arc, LazyLock};
+use std::{path::PathBuf, sync::{Arc, LazyLock}};
 use iced::{Border, Color, Shadow, Theme, Vector, border::Radius, theme::Palette, widget::image};
 // 这里定义各种公共类型
 // FileData用于文件区和编辑区交互

@@ -44,12 +44,14 @@ pub struct Preview {
 pub enum PreviewMessage {
     SyncContnetWithEditor(Arc<String>),
     GetImgPathFromFilePanel(Vec<ImgData>),
+    GetImgBasePathFromFilePanel(PathBuf),
     EditorAction(text_editor::Action),
     ChangePageTo(PreviewPage),
     UpdateTimeStr,
     // 处理子模块消息
     Markdown(MarkdownMessage),
     ImageGallery(ImageGalleryMessage),
+    SendImgIdToFilePanel(u32),
     TextBoard(TextBoardMessage),
     LogView(LogViewerMessage),
 }
@@ -82,6 +84,9 @@ impl Preview {
         setting: &AppSetting,
     ) -> Task<PreviewMessage> {
         match preview_message {
+            PreviewMessage::GetImgBasePathFromFilePanel(path) => {
+                Task::done(PreviewMessage::Markdown(MarkdownMessage::GetImgBasePathFromFilePanel(path)))
+            }
             PreviewMessage::GetImgPathFromFilePanel(image_data) => Task::done(
                 PreviewMessage::ImageGallery(ImageGalleryMessage::LoadImage(image_data)),
             ),
@@ -89,10 +94,9 @@ impl Preview {
                 self.current_date_time = Preview::get_time_str();
                 Task::none()
             }
-            PreviewMessage::SyncContnetWithEditor(raw) => self
-                .marddown
-                .update(MarkdownMessage::LoadRawText(raw))
-                .map(PreviewMessage::Markdown),
+            PreviewMessage::SyncContnetWithEditor(raw) => {
+                Task::done(PreviewMessage::Markdown(MarkdownMessage::LoadRawText(raw)))
+            }
             PreviewMessage::ChangePageTo(page) => {
                 self.current_page = page;
                 Task::none()
@@ -108,6 +112,9 @@ impl Preview {
                 ImageGalleryMessage::ShowImageGallery => {
                     self.current_page = PreviewPage::ImageGallery;
                     Task::none()
+                }
+                ImageGalleryMessage::SendImgIdToFilePanel(id) => {
+                    Task::done(PreviewMessage::SendImgIdToFilePanel(id))
                 }
                 _ => self
                     .image_gallery
@@ -187,8 +194,9 @@ impl Preview {
 
     pub fn subscription(&self) -> Subscription<PreviewMessage> {
         Subscription::batch([
-            iced::time::every(iced::time::Duration::from_secs(1)).map(|_| PreviewMessage::UpdateTimeStr),
-            self.log_viewer.subscription().map(PreviewMessage::LogView)
+            iced::time::every(iced::time::Duration::from_secs(1))
+                .map(|_| PreviewMessage::UpdateTimeStr),
+            self.log_viewer.subscription().map(PreviewMessage::LogView),
         ])
     }
 

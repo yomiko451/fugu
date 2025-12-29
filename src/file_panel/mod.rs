@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::{
     common::*,
     file_panel::{
@@ -46,8 +48,10 @@ pub enum FilePanelMessage {
     ReturnSaveResult(Result<(), AppError>),
     SendFileDataToEditor(FileData),
     SendImgDataToPreview(Vec<ImgData>),
+    SendImgBasePathToPreview(PathBuf),
+    SendImgCodeToEditor(String),
     FileTree(FileTreeMessage),
-
+    GetImgIdFromPreview(u32),
     HandleError(AppError),
 }
 
@@ -79,6 +83,12 @@ impl FilePanel {
                 }
                 FileTreeMessage::SendImgDataToPreview(image_data) => {
                     Task::done(FilePanelMessage::SendImgDataToPreview(image_data))
+                }
+                FileTreeMessage::SendImgBasePathToPreview(path) => {
+                    Task::done(FilePanelMessage::SendImgBasePathToPreview(path))
+                }
+                FileTreeMessage::SendImgCodeToEditor(code) => {
+                    Task::done(FilePanelMessage::SendImgCodeToEditor(code))
                 }
                 _ => self
                     .file_tree
@@ -143,6 +153,9 @@ impl FilePanel {
             FilePanelMessage::SaveAs(file_data) => Task::done(FilePanelMessage::FileTree(
                 FileTreeMessage::SaveAs(file_data),
             )),
+            FilePanelMessage::GetImgIdFromPreview(id) => {
+                Task::done(FilePanelMessage::FileTree(FileTreeMessage::CopyImgFileData(id)))
+            }
             FilePanelMessage::HandleError(error) => {
                 info!("{}", error.to_string());
                 Task::none()

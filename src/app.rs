@@ -1,7 +1,11 @@
 use std::sync::Arc;
 
 use crate::{
-    common::{AppSetting, DEFAULT_SETTING}, editor::{Editor, EditorMessage}, file_panel::{FilePanel, FilePanelMessage}, menu_bar::{MenuBar, MenuBarMessage}, preview::{Preview, PreviewMessage}
+    common::{AppSetting, DEFAULT_SETTING},
+    editor::{Editor, EditorMessage},
+    file_panel::{FilePanel, FilePanelMessage},
+    menu_bar::{MenuBar, MenuBarMessage},
+    preview::{Preview, PreviewMessage},
 };
 use iced::{
     Element, Length, Subscription, Task,
@@ -17,7 +21,7 @@ pub struct App {
     preview: Preview,
     file_panel: FilePanel,
     menu_bar: MenuBar,
-    setting: AppSetting
+    setting: AppSetting,
 }
 
 #[derive(Debug, Clone)]
@@ -33,20 +37,6 @@ pub enum AppMessage {
 
 impl App {
     pub fn new() -> (Self, Task<AppMessage>) {
-        //初始化日志
-        // let file_appender = rolling::daily("logs", "app.log");
-        // let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
-
-        // tracing_subscriber::fmt()
-        //     .with_env_filter(EnvFilter::new("fugu=info"))
-        //     .with_ansi(false)
-        //     .with_writer(non_blocking)
-        //     .init();
-        
-        // tracing_subscriber::fmt()
-        //     .with_env_filter(EnvFilter::new("fugu=info"))
-        //     .init();
-        // info!("应用启动！");
         let app = Self {
             editor: Editor::new(),
             preview: Preview::new(),
@@ -54,61 +44,55 @@ impl App {
             menu_bar: MenuBar::new(),
             setting: DEFAULT_SETTING,
         };
-        let task = Task::batch([
-            Task::none()
-        ]);
+        let task = Task::batch([Task::none()]);
         (app, task)
     }
 
     pub fn update(&mut self, app_message: AppMessage) -> Task<AppMessage> {
         match app_message {
             AppMessage::FilePanel(file_panel_message) => match file_panel_message {
-                FilePanelMessage::SendFileDataToEditor(file_data) => self
-                    .editor
-                    .update(EditorMessage::LoadFileDataFromFilePanel(file_data), &self.setting)
-                    .map(AppMessage::Editor),
-                FilePanelMessage::ReturnSaveResult(operation_result) => self
-                    .editor
-                    .update(EditorMessage::HandleSaveResult(operation_result), &self.setting)
-                    .map(AppMessage::Editor),
-                FilePanelMessage::SendImgDataToPreview(image_data) => self
-                    .preview
-                    .update(PreviewMessage::GetImgPathFromFilePanel(image_data), &self.setting)
-                    .map(AppMessage::Preview),
+                FilePanelMessage::SendFileDataToEditor(file_data) => Task::done(
+                    AppMessage::Editor(EditorMessage::LoadFileDataFromFilePanel(file_data)),
+                ),
+                FilePanelMessage::ReturnSaveResult(operation_result) => Task::done(
+                    AppMessage::Editor(EditorMessage::HandleSaveResult(operation_result)),
+                ),
+                FilePanelMessage::SendImgDataToPreview(image_data) => Task::done(
+                    AppMessage::Preview(PreviewMessage::GetImgPathFromFilePanel(image_data)),
+                ),
+                FilePanelMessage::SendImgCodeToEditor(code) => {
+                    Task::done(AppMessage::Editor(EditorMessage::GetImgCodeFromFilePanel(code)))
+                }
+                FilePanelMessage::SendImgBasePathToPreview(path) => {
+                    Task::done(AppMessage::Preview(PreviewMessage::GetImgBasePathFromFilePanel(path)))
+                }
                 _ => self
                     .file_panel
                     .update(file_panel_message, &self.setting)
                     .map(AppMessage::FilePanel),
             },
             AppMessage::MenuBar(menu_bar_message) => match menu_bar_message {
-                MenuBarMessage::CommandOpenFolder => self
-                    .file_panel
-                    .update(FilePanelMessage::OpenMdFolder, &self.setting)
-                    .map(AppMessage::FilePanel),
-                MenuBarMessage::CommandOpenFile => self
-                    .file_panel
-                    .update(FilePanelMessage::OpenFile, &self.setting)
-                    .map(AppMessage::FilePanel),
-                MenuBarMessage::CommandImportImg => self
-                    .file_panel
-                    .update(FilePanelMessage::ImportImg, &self.setting)
-                    .map(AppMessage::FilePanel),
-                MenuBarMessage::CommandImportImgFolder => self
-                    .file_panel
-                    .update(FilePanelMessage::ImportImgFolder, &self.setting)
-                    .map(AppMessage::FilePanel),
-                MenuBarMessage::CommandCreateNewFile => self
-                    .file_panel
-                    .update(FilePanelMessage::CreateNewFile, &self.setting)
-                    .map(AppMessage::FilePanel),
-                MenuBarMessage::CommandSaveFile=> self
-                    .editor
-                    .update(EditorMessage::SaveRequested, &self.setting)
-                    .map(AppMessage::Editor),
-                MenuBarMessage::CommandSaveAs=> self
-                    .editor
-                    .update(EditorMessage::SaveAsRequested, &self.setting)
-                    .map(AppMessage::Editor),
+                MenuBarMessage::CommandOpenFolder => {
+                    Task::done(AppMessage::FilePanel(FilePanelMessage::OpenMdFolder))
+                }
+                MenuBarMessage::CommandOpenFile => {
+                    Task::done(AppMessage::FilePanel(FilePanelMessage::OpenFile))
+                }
+                MenuBarMessage::CommandImportImg => {
+                    Task::done(AppMessage::FilePanel(FilePanelMessage::ImportImg))
+                }
+                MenuBarMessage::CommandImportImgFolder => {
+                    Task::done(AppMessage::FilePanel(FilePanelMessage::ImportImgFolder))
+                }
+                MenuBarMessage::CommandCreateNewFile => {
+                    Task::done(AppMessage::FilePanel(FilePanelMessage::CreateNewFile))
+                }
+                MenuBarMessage::CommandSaveFile => {
+                    Task::done(AppMessage::Editor(EditorMessage::SaveRequested))
+                }
+                MenuBarMessage::CommandSaveAs => {
+                    Task::done(AppMessage::Editor(EditorMessage::SaveAsRequested))
+                }
                 MenuBarMessage::SettingAutoSave(auto_save) => {
                     self.setting.auto_save = auto_save;
                     Task::none()
@@ -119,25 +103,27 @@ impl App {
                     .map(AppMessage::MenuBar),
             },
             AppMessage::Editor(editor_message) => match editor_message {
-                EditorMessage::SendNewContentToPreview(new_content) => self
-                    .preview
-                    .update(PreviewMessage::SyncContnetWithEditor(new_content), &self.setting)
-                    .map(AppMessage::Preview),
-                EditorMessage::AutoSaveToFile(file_data) => self
-                    .file_panel
-                    .update(FilePanelMessage::AutoSave(file_data), &self.setting)
-                    .map(AppMessage::FilePanel),
-                EditorMessage::FileSaveAs(file_data) => self
-                    .file_panel
-                    .update(FilePanelMessage::SaveAs(file_data), &self.setting)
-                    .map(AppMessage::FilePanel),
-                EditorMessage::SaveToFile(file_data) => self
-                    .file_panel
-                    .update(FilePanelMessage::Save(file_data), &self.setting)
-                    .map(AppMessage::FilePanel),
-                _ => self.editor.update(editor_message, &self.setting).map(AppMessage::Editor),
+                EditorMessage::SendNewContentToPreview(new_content) => Task::done(
+                    AppMessage::Preview(PreviewMessage::SyncContnetWithEditor(new_content)),
+                ),
+                EditorMessage::AutoSaveToFile(file_data) => {
+                    Task::done(AppMessage::FilePanel(FilePanelMessage::AutoSave(file_data)))
+                }
+                EditorMessage::FileSaveAs(file_data) => {
+                    Task::done(AppMessage::FilePanel(FilePanelMessage::SaveAs(file_data)))
+                }
+                EditorMessage::SaveToFile(file_data) => {
+                    Task::done(AppMessage::FilePanel(FilePanelMessage::Save(file_data)))
+                }
+                _ => self
+                    .editor
+                    .update(editor_message, &self.setting)
+                    .map(AppMessage::Editor),
             },
             AppMessage::Preview(preview_message) => match preview_message {
+                PreviewMessage::SendImgIdToFilePanel(id) => Task::done(AppMessage::FilePanel(
+                    FilePanelMessage::GetImgIdFromPreview(id),
+                )),
                 _ => self
                     .preview
                     .update(preview_message, &self.setting)
@@ -193,8 +179,6 @@ impl App {
     }
 
     pub fn subscription(&self) -> Subscription<AppMessage> {
-        Subscription::batch([
-            self.preview.subscription().map(AppMessage::Preview)
-        ])
+        Subscription::batch([self.preview.subscription().map(AppMessage::Preview)])
     }
 }

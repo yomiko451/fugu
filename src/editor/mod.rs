@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use crate::{
     common::*,
@@ -53,7 +53,7 @@ pub enum EditorMessage {
     HandleSaveResult(Result<(), AppError>),
 
     LoadFileDataFromFilePanel(FileData),
-
+    GetImgCodeFromFilePanel(String),
     // 各种模态窗口消息
     ChangeDialogPage(DialogPage),
     TableDialog(TableDialogMessage),
@@ -86,26 +86,33 @@ impl Editor {
                 self.editor_content.perform(action);
                 if is_edit {
                     let new_input = Arc::new(self.editor_content.text());
-                    let task = if let Some(file_node) = &mut self.selected_file {
-                        file_node.version += 1;
-                        file_node.content = Arc::clone(&new_input);
-                        Task::perform(
-                            Editor::set_auto_save_delay_timer(file_node.version),
+                    if let Some(file_data) = &mut self.selected_file {
+                        file_data.version += 1;
+                        file_data.content = Arc::clone(&new_input);
+                        return Task::done(EditorMessage::SendNewContentToPreview(
+                            new_input
+                        ))
+                        .chain(Task::perform(
+                            Editor::set_auto_save_delay_timer(file_data.version),
                             EditorMessage::AutoSaveCheck,
-                        )
-                    } else {
-                        Task::none()
-                    };
-                    return Task::done(EditorMessage::SendNewContentToPreview(new_input))
-                        .chain(task);
+                        ));
+                    }
                 }
                 Task::none()
             }
             EditorMessage::LoadFileDataFromFilePanel(file_data) => {
+                // 只是新加载内容，不希望触发版本号改变和自动保存计时器
+                // 所以不发送EditorMessage::EditorAction(file_data.content.clone())
+                // 而是直接操作编辑器，并直接发送内容给预览模块
                 self.selected_file = Some(file_data.clone());
                 self.editor_content = text_editor::Content::new();
-                self.editor_content.perform(text_editor::Action::Edit(text_editor::Edit::Paste(Arc::clone(&file_data.content))));
-                self.editor_content.perform(text_editor::Action::Move(text_editor::Motion::DocumentStart));
+                self.editor_content
+                    .perform(text_editor::Action::Edit(text_editor::Edit::Paste(
+                        Arc::clone(&file_data.content),
+                    )));
+                self.editor_content.perform(text_editor::Action::Move(
+                    text_editor::Motion::DocumentStart,
+                ));
                 self.original_version = Some(file_data.version);
                 info!("文件内容载入成功!");
                 Task::done(EditorMessage::SendNewContentToPreview(Arc::clone(
@@ -143,6 +150,10 @@ impl Editor {
                     return Task::done(EditorMessage::FileSaveAs(file_data.clone()));
                 }
                 Task::none()
+            }
+            EditorMessage::GetImgCodeFromFilePanel(code) => {
+                let action = text_editor::Action::Edit(text_editor::Edit::Paste(Arc::new(code)));
+                Task::done(EditorMessage::EditorAction(action))
             }
             // 处理各种子模块模态窗口消息
             EditorMessage::ChangeDialogPage(dialog) => {

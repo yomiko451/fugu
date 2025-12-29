@@ -1,6 +1,9 @@
 use crate::{
     common::*,
-    preview::{markdown, viewer::{CUSTOM_SETTINGS, CustomViewer}},
+    preview::{
+        markdown,
+        viewer::{CUSTOM_SETTINGS, CustomViewer},
+    },
 };
 use iced::{
     Element, Length, Padding, Task, Theme,
@@ -20,21 +23,27 @@ use tracing::info;
 pub struct Markdown {
     raw: Option<Arc<String>>,
     content: iced_markdown::Content,
-    image: HashMap<iced_markdown::Uri, image::Handle>,
+    image: HashMap<String, image::Handle>,
+    image_base_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone)]
 pub enum MarkdownMessage {
+    GetImgBasePathFromFilePanel(PathBuf),
     LoadRawText(Arc<String>),
     RenderMarkdown,
-    HandleImageUrl(Vec<iced_markdown::Uri>),
-    InsertImageToDict(Vec<(iced_markdown::Uri, image::Handle)>),
+    HandleImageUrl(Vec<(PathBuf, String)>),
+    InsertImageToDict(Vec<(String, image::Handle)>),
     LinkClicked(iced_markdown::Uri),
 }
 
 impl Markdown {
     pub fn update(&mut self, markdown_message: MarkdownMessage) -> Task<MarkdownMessage> {
         match markdown_message {
+            MarkdownMessage::GetImgBasePathFromFilePanel(path) => {
+                self.image_base_path = Some(path);
+                Task::none()
+            }
             MarkdownMessage::LoadRawText(raw) => {
                 self.raw = Some(raw);
                 Task::done(MarkdownMessage::RenderMarkdown)
@@ -42,17 +51,19 @@ impl Markdown {
             MarkdownMessage::RenderMarkdown => {
                 if let Some(ref content) = self.raw {
                     self.content = iced_markdown::Content::parse(content);
-                    let url_vec = self
-                        .content
-                        .images()
-                        .iter()
-                        .filter(|url| {
-                            (url.ends_with("jpg") || url.ends_with("png"))
-                                && !self.image.contains_key(url.as_str())
-                        })
-                        .cloned()
-                        .collect::<Vec<iced_markdown::Uri>>();
-                    return Task::done(MarkdownMessage::HandleImageUrl(url_vec));
+                    if let Some(ref path) = self.image_base_path {
+                        let url_vec = self
+                            .content
+                            .images()
+                            .iter()
+                            .filter(|url| {
+                                (url.ends_with("jpg") || url.ends_with("png"))
+                                    && !self.image.contains_key(url.as_str())
+                            })
+                            .map(|url| (path.parent().expect("必定合法路径不应当出错!").join(url), url.to_string()))
+                            .collect::<Vec<(PathBuf, String)>>();
+                        return Task::done(MarkdownMessage::HandleImageUrl(url_vec));
+                    }
                 }
                 Task::none()
             }
@@ -60,11 +71,11 @@ impl Markdown {
                 tokio::task::spawn_blocking(|| {
                     url_vec
                         .into_iter()
-                        .map(|url| {
-                            let handle = image::Handle::from_path(&url);
-                            (url, handle)
+                        .map(|(path, key)| {
+                            let handle = image::Handle::from_path(&path);
+                            (key, handle)
                         })
-                        .collect::<Vec<(iced_markdown::Uri, image::Handle)>>()
+                        .collect::<Vec<(String, image::Handle)>>()
                 })
                 .await
             })
@@ -77,6 +88,7 @@ impl Markdown {
             }),
             MarkdownMessage::InsertImageToDict(images) => {
                 for (url, handle) in images {
+                    
                     self.image.insert(url, handle);
                 }
                 Task::none()
