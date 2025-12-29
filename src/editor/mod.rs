@@ -2,7 +2,6 @@ use std::{path::PathBuf, sync::Arc};
 
 use crate::{
     common::*,
-    editor::dialog::{TableDialog, TableDialogMessage},
 };
 use iced::{
     Background, Border, Color, Element, Length, Padding, Subscription, Task, Theme,
@@ -14,8 +13,6 @@ use iced::{
     },
 };
 use tracing::{error, info};
-
-mod dialog;
 mod operation;
 
 #[derive(Debug)]
@@ -24,16 +21,6 @@ pub struct Editor {
     original_version: Option<u64>,
     editor_content: text_editor::Content,
     snap_shot: Vec<FileData>,
-    // 各种模态窗口
-    current_dialog: DialogPage,
-    table_dialog: TableDialog, //history: VecDeque<text_editor::Action>,
-                               //undo_stack: Vec<text_editor::Action>,                               //redo_stack: Vec<text_editor::Action>,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum DialogPage {
-    None,
-    TableDialog,
 }
 
 #[derive(Debug, Clone)]
@@ -55,8 +42,7 @@ pub enum EditorMessage {
     LoadFileDataFromFilePanel(FileData),
     GetImgCodeFromFilePanel(String),
     // 各种模态窗口消息
-    ChangeDialogPage(DialogPage),
-    TableDialog(TableDialogMessage),
+    OpenEditorTableDialog
 }
 
 impl Editor {
@@ -66,8 +52,6 @@ impl Editor {
             editor_content: text_editor::Content::default(),
             snap_shot: vec![],
             original_version: None,
-            current_dialog: DialogPage::None,
-            table_dialog: TableDialog::default(),
             //history: VecDeque::with_capacity(100),
             //undo_stack: vec![],
             //redo_stack: vec![],
@@ -155,21 +139,6 @@ impl Editor {
                 let action = text_editor::Action::Edit(text_editor::Edit::Paste(Arc::new(code)));
                 Task::done(EditorMessage::EditorAction(action))
             }
-            // 处理各种子模块模态窗口消息
-            EditorMessage::ChangeDialogPage(dialog) => {
-                self.current_dialog = dialog;
-                Task::none()
-            }
-            EditorMessage::TableDialog(table_dialog_message) => match table_dialog_message {
-                TableDialogMessage::CloseDialog => {
-                    self.current_dialog = DialogPage::None;
-                    Task::none()
-                }
-                _ => self
-                    .table_dialog
-                    .update(table_dialog_message)
-                    .map(EditorMessage::TableDialog),
-            },
             _ => Task::none(),
         }
     }
@@ -183,15 +152,7 @@ impl Editor {
         } else {
             (0, 0)
         };
-        let base: Element<'_, EditorMessage> = self.generate_editor_component().into();
-        let editor_view = match self.current_dialog {
-            DialogPage::None => base,
-            DialogPage::TableDialog => Editor::set_modal(
-                base.into(),
-                self.table_dialog.view().map(EditorMessage::TableDialog),
-            ),
-            _ => base,
-        };
+        let editor_view: Element<'_, EditorMessage> = self.generate_editor_component().into();
         container(column![
             editor_view,
             container(
@@ -228,7 +189,7 @@ impl Editor {
                 .interaction(mouse::Interaction::Pointer),
             mouse_area(text("表格").size(FONT_SIZE_BIGGER))
                 .interaction(mouse::Interaction::Pointer)
-                .on_press(EditorMessage::ChangeDialogPage(DialogPage::TableDialog)),
+                .on_press(EditorMessage::OpenEditorTableDialog),
             mouse_area(text("注释").size(FONT_SIZE_BIGGER))
                 .interaction(mouse::Interaction::Pointer),
             mouse_area(text("链接").size(FONT_SIZE_BIGGER))
@@ -298,27 +259,5 @@ impl Editor {
     pub async fn set_auto_save_delay_timer(version: u64) -> u64 {
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         version
-    }
-
-    pub fn set_modal<'a>(
-        base: Element<'a, EditorMessage>,
-        content: Element<'a, EditorMessage>,
-    ) -> Element<'a, EditorMessage> {
-        stack![
-            base,
-            opaque(center(content).style(|_theme| {
-                container::Style {
-                    background: Some(
-                        Color {
-                            a: 0.2,
-                            ..Color::BLACK
-                        }
-                        .into(),
-                    ),
-                    ..container::Style::default()
-                }
-            }))
-        ]
-        .into()
     }
 }

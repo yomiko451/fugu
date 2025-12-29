@@ -6,13 +6,13 @@ use iced::{
 use crate::common::*;
 
 #[derive(Debug, Default, Clone)]
-pub struct TableDialog {
+pub struct EditorTable {
     row: String,
     column: String,
 }
 
 #[derive(Debug, Clone)]
-pub enum TableDialogMessage {
+pub enum EditorTableMessage {
     RowChanged(String),
     ColumnChanged(String),
     ConfirmInput,
@@ -20,28 +20,28 @@ pub enum TableDialogMessage {
     CloseDialog,
 }
 
-impl TableDialog {
-    pub fn update(&mut self, message: TableDialogMessage) -> Task<TableDialogMessage> {
+impl EditorTable {
+    pub fn update(&mut self, message: EditorTableMessage) -> Task<EditorTableMessage> {
         match message {
-            TableDialogMessage::RowChanged(row) => {
+            EditorTableMessage::RowChanged(row) => {
                 self.row = row;
                 Task::none()
             }
-            TableDialogMessage::ColumnChanged(column) => {
+            EditorTableMessage::ColumnChanged(column) => {
                 self.column = column;
                 Task::none()
             }
-            TableDialogMessage::ConfirmInput => Task::none(),
-            TableDialogMessage::CancelInput => {
+            EditorTableMessage::ConfirmInput => Task::none(),
+            EditorTableMessage::CancelInput => {
                 self.row = "".to_string();
                 self.column = "".to_string();
-                Task::done(TableDialogMessage::CloseDialog)
+                Task::done(EditorTableMessage::CloseDialog)
             }
             _ => Task::none(),
         }
     }
 
-    pub fn view(&self) -> Element<'_, TableDialogMessage> {
+    pub fn view(&self) -> Element<'_, EditorTableMessage> {
         container(column![
             space::vertical(),
             text("请输入行和列")
@@ -51,10 +51,10 @@ impl TableDialog {
             column![
                 text_input("行", &self.row)
                     .line_height(1.)
-                    .on_input(TableDialogMessage::RowChanged),
+                    .on_input(EditorTableMessage::RowChanged),
                 text_input("列", &self.column)
                     .line_height(1.)
-                    .on_input(TableDialogMessage::ColumnChanged)
+                    .on_input(EditorTableMessage::ColumnChanged)
             ]
             .spacing(SPACING_SMALLER),
             space::vertical(),
@@ -62,11 +62,11 @@ impl TableDialog {
                 space::horizontal(),
                 mouse_area(text("确定"))
                     .interaction(mouse::Interaction::Pointer)
-                    .on_press(TableDialogMessage::CancelInput),
+                    .on_press(EditorTableMessage::CancelInput),
                 space::horizontal(),
                 mouse_area(text("取消"))
                     .interaction(mouse::Interaction::Pointer)
-                    .on_press(TableDialogMessage::CancelInput),
+                    .on_press(EditorTableMessage::CancelInput),
                 space::horizontal(),
             ],
             space::vertical()

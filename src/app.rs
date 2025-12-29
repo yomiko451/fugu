@@ -2,14 +2,14 @@ use std::sync::Arc;
 
 use crate::{
     common::{AppSetting, DEFAULT_SETTING},
+    dialog::{self, Dialog, DialogMessage},
     editor::{Editor, EditorMessage},
     file_panel::{FilePanel, FilePanelMessage},
     menu_bar::{MenuBar, MenuBarMessage},
     preview::{Preview, PreviewMessage},
 };
 use iced::{
-    Element, Length, Subscription, Task,
-    widget::{column, row},
+    Color, Element, Length, Subscription, Task, application::timed::UpdateFn, widget::{center, column, container, opaque, row, stack}
 };
 use tracing::{error, info, warn};
 use tracing_appender::rolling;
@@ -21,6 +21,7 @@ pub struct App {
     preview: Preview,
     file_panel: FilePanel,
     menu_bar: MenuBar,
+    dialog: Dialog,
     setting: AppSetting,
 }
 
@@ -31,6 +32,7 @@ pub enum AppMessage {
     Preview(PreviewMessage),
     FilePanel(FilePanelMessage),
     MenuBar(MenuBarMessage),
+    Dialog(DialogMessage),
     // 顶层消息
     None,
 }
@@ -42,6 +44,7 @@ impl App {
             preview: Preview::new(),
             file_panel: FilePanel::new(),
             menu_bar: MenuBar::new(),
+            dialog: Dialog::new(),
             setting: DEFAULT_SETTING,
         };
         let task = Task::batch([Task::none()]);
@@ -50,6 +53,10 @@ impl App {
 
     pub fn update(&mut self, app_message: AppMessage) -> Task<AppMessage> {
         match app_message {
+            AppMessage::Dialog(dialog_message) => match dialog_message {
+                
+                _ => self.dialog.update(dialog_message).map(AppMessage::Dialog)
+            }
             AppMessage::FilePanel(file_panel_message) => match file_panel_message {
                 FilePanelMessage::SendFileDataToEditor(file_data) => Task::done(
                     AppMessage::Editor(EditorMessage::LoadFileDataFromFilePanel(file_data)),
@@ -60,12 +67,12 @@ impl App {
                 FilePanelMessage::SendImgDataToPreview(image_data) => Task::done(
                     AppMessage::Preview(PreviewMessage::GetImgPathFromFilePanel(image_data)),
                 ),
-                FilePanelMessage::SendImgCodeToEditor(code) => {
-                    Task::done(AppMessage::Editor(EditorMessage::GetImgCodeFromFilePanel(code)))
-                }
-                FilePanelMessage::SendImgBasePathToPreview(path) => {
-                    Task::done(AppMessage::Preview(PreviewMessage::GetImgBasePathFromFilePanel(path)))
-                }
+                FilePanelMessage::SendImgCodeToEditor(code) => Task::done(AppMessage::Editor(
+                    EditorMessage::GetImgCodeFromFilePanel(code),
+                )),
+                FilePanelMessage::SendImgBasePathToPreview(path) => Task::done(
+                    AppMessage::Preview(PreviewMessage::GetImgBasePathFromFilePanel(path)),
+                ),
                 _ => self
                     .file_panel
                     .update(file_panel_message, &self.setting)
@@ -115,6 +122,9 @@ impl App {
                 EditorMessage::SaveToFile(file_data) => {
                     Task::done(AppMessage::FilePanel(FilePanelMessage::Save(file_data)))
                 }
+                EditorMessage::OpenEditorTableDialog => {
+                    Task::done(AppMessage::Dialog(DialogMessage::OpenEditorTableDialog))
+                }
                 _ => self
                     .editor
                     .update(editor_message, &self.setting)
@@ -159,7 +169,7 @@ impl App {
             .height(Length::Fill)
             .into();
 
-        row![
+        let base = row![
             column![
                 menu_bar.map(AppMessage::MenuBar),
                 row![
@@ -175,10 +185,38 @@ impl App {
         ]
         .width(Length::Fill)
         .height(Length::Fill)
-        .into()
+        .into();
+
+        match self.dialog.is_show() {
+            true => App::set_modal(base, self.dialog.view().map(AppMessage::Dialog)),
+            false => base,
+        }
     }
 
     pub fn subscription(&self) -> Subscription<AppMessage> {
         Subscription::batch([self.preview.subscription().map(AppMessage::Preview)])
+    }
+    
+    // 用于展示模态窗口
+    pub fn set_modal<'a>(
+        base: Element<'a, AppMessage>,
+        content: Element<'a, AppMessage>,
+    ) -> Element<'a, AppMessage> {
+        stack![
+            base,
+            opaque(center(content).style(|_theme| {
+                container::Style {
+                    background: Some(
+                        Color {
+                            a: 0.2,
+                            ..Color::BLACK
+                        }
+                        .into(),
+                    ),
+                    ..container::Style::default()
+                }
+            }))
+        ]
+        .into()
     }
 }

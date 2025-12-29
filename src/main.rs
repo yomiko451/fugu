@@ -6,6 +6,7 @@ mod preview;
 mod file_panel;
 mod setting;
 mod menu_bar;
+mod dialog;
 mod app;
 
 fn main() -> iced::Result {
