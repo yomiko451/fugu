@@ -1,17 +1,19 @@
-use editor_table::EditorTable;
+use editor_table::EditorTableDialog;
 use iced::{
     Color, Element, Task,
     widget::{center, container, opaque, space, stack},
 };
 
-use crate::dialog::editor_table::EditorTableMessage;
+use crate::dialog::{confirm::ConfirmDialog, editor_table::EditorTableDialogMessage};
 
 mod editor_table;
+mod confirm;
 
 #[derive(Debug, Default, Clone)]
 pub struct Dialog {
     current_dialog: DialogType,
-    editor_table: EditorTable,
+    editor_table: EditorTableDialog,
+    confirm: ConfirmDialog,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
@@ -19,19 +21,22 @@ pub enum DialogType {
     #[default]
     NoDialog,
     EditorTable,
+    Confirm
 }
 
 #[derive(Debug, Clone)]
 pub enum DialogMessage {
     OpenEditorTableDialog,
-    EditorTableMessage(EditorTableMessage),
+    OpenConfirmDialog(String),
+    EditorTableMessage(EditorTableDialogMessage),
 }
 
 impl Dialog {
     pub fn new() -> Self {
         Self {
             current_dialog: DialogType::default(),
-            editor_table: EditorTable::default(),
+            editor_table: EditorTableDialog::default(),
+            confirm: ConfirmDialog::default()
         }
     }
 
@@ -42,7 +47,7 @@ impl Dialog {
                 Task::none()
             }
             DialogMessage::EditorTableMessage(editor_table_message) => match editor_table_message {
-                EditorTableMessage::CloseDialog => {
+                EditorTableDialogMessage::CloseDialog => {
                     self.current_dialog = DialogType::default();
                     Task::none()
                 }
