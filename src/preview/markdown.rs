@@ -28,6 +28,12 @@ pub struct Markdown {
 }
 
 #[derive(Debug, Clone)]
+pub struct Img {
+    ab_path: PathBuf,
+    handle: image::Handle
+}
+
+#[derive(Debug, Clone)]
 pub enum MarkdownMessage {
     GetImgBasePathFromFilePanel(PathBuf),
     LoadRawText(Arc<String>),
@@ -60,6 +66,16 @@ impl Markdown {
                                 (url.ends_with("jpg") || url.ends_with("png"))
                                     && !self.image.contains_key(url.as_str())
                             })
+                            // TODO
+                            // 这里需要大量重写，采用缓存机制，
+                            // 编辑过程中只暂时用缓存handle预览图片,保存时再创建fugu-images并复制文件
+                            // 删除file_panel到preview的path传递，只需要保存时检查markdown的images确认是否要拷贝即可
+                            // 如果用户直接输入的绝对路径，照常载入handle到markdown的images
+                            // 如果用户通过图片面板插入，preview内部markdown和image_gallery通信传递handle即可
+                            // 如此一来新文件也可以再保存后有路径了再解决图片插入问题
+                            // 用户输入的源码尽量不动，重点在于源码路径与真实路径间的映射与文件拷贝
+                            
+                            
                             .map(|url| (path.parent().expect("必定合法路径不应当出错!").join(url), url.to_string()))
                             .collect::<Vec<(PathBuf, String)>>();
                         return Task::done(MarkdownMessage::HandleImageUrl(url_vec));
