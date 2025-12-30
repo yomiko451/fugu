@@ -163,7 +163,7 @@ impl FileNode {
         }
     }
 
-    pub fn reverse_expanded_if_node_is_directory(&mut self) {
+    pub fn reverse_expanded_if_directory(&mut self) {
         match self {
             FileNode {
                 node_content: NodeContent::DirectoryMd(Dir { expanded, .. }),

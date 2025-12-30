@@ -9,7 +9,9 @@ use crate::{
     preview::{Preview, PreviewMessage},
 };
 use iced::{
-    Color, Element, Length, Subscription, Task, application::timed::UpdateFn, widget::{center, column, container, opaque, row, stack}
+    Color, Element, Length, Subscription, Task,
+    application::timed::UpdateFn,
+    widget::{center, column, container, opaque, row, stack},
 };
 use tracing::{error, info, warn};
 use tracing_appender::rolling;
@@ -54,10 +56,15 @@ impl App {
     pub fn update(&mut self, app_message: AppMessage) -> Task<AppMessage> {
         match app_message {
             AppMessage::Dialog(dialog_message) => match dialog_message {
-                
-                _ => self.dialog.update(dialog_message).map(AppMessage::Dialog)
-            }
+                DialogMessage::SendConfirmResult(is_user_agreed) => Task::done(AppMessage::Editor(
+                    EditorMessage::GetConfirmResult(is_user_agreed),
+                )),
+                _ => self.dialog.update(dialog_message).map(AppMessage::Dialog),
+            },
             AppMessage::FilePanel(file_panel_message) => match file_panel_message {
+                FilePanelMessage::AskIsLoadPermitted => {
+                    Task::done(AppMessage::Editor(EditorMessage::CheckSaveState))
+                }
                 FilePanelMessage::SendFileDataToEditor(file_data) => Task::done(
                     AppMessage::Editor(EditorMessage::LoadFileDataFromFilePanel(file_data)),
                 ),
@@ -113,6 +120,9 @@ impl App {
                 EditorMessage::SendNewContentToPreview(new_content) => Task::done(
                     AppMessage::Preview(PreviewMessage::SyncContnetWithEditor(new_content)),
                 ),
+                EditorMessage::LoadPermitted => {
+                    Task::done(AppMessage::FilePanel(FilePanelMessage::LoadPermitted))
+                }
                 EditorMessage::AutoSaveToFile(file_data) => {
                     Task::done(AppMessage::FilePanel(FilePanelMessage::AutoSave(file_data)))
                 }
@@ -124,6 +134,9 @@ impl App {
                 }
                 EditorMessage::OpenEditorTableDialog => {
                     Task::done(AppMessage::Dialog(DialogMessage::OpenEditorTableDialog))
+                }
+                EditorMessage::OpenConfirmDialog(text) => {
+                    Task::done(AppMessage::Dialog(DialogMessage::OpenConfirmDialog(text)))
                 }
                 _ => self
                     .editor
@@ -196,7 +209,7 @@ impl App {
     pub fn subscription(&self) -> Subscription<AppMessage> {
         Subscription::batch([self.preview.subscription().map(AppMessage::Preview)])
     }
-    
+
     // 用于展示模态窗口
     pub fn set_modal<'a>(
         base: Element<'a, AppMessage>,

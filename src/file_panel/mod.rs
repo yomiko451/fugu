@@ -47,6 +47,8 @@ pub enum FilePanelMessage {
     ChangeMode(Mode),
     ReturnSaveResult(Result<(), AppError>),
     SendFileDataToEditor(FileData),
+    AskIsLoadPermitted,
+    LoadPermitted,
     SendImgDataToPreview(Vec<ImgData>),
     SendImgBasePathToPreview(PathBuf),
     SendImgCodeToEditor(String),
@@ -74,6 +76,9 @@ impl FilePanel {
                 Task::none()
             }
             // 转发给文件树模块
+            FilePanelMessage::LoadPermitted => Task::done(
+                FilePanelMessage::FileTree(FileTreeMessage::LoadPermitted),
+            ),
             FilePanelMessage::FileTree(file_tree_message) => match file_tree_message {
                 FileTreeMessage::ReturnSaveResult(result) => {
                     Task::done(FilePanelMessage::ReturnSaveResult(result))
@@ -89,6 +94,9 @@ impl FilePanel {
                 }
                 FileTreeMessage::SendImgCodeToEditor(code) => {
                     Task::done(FilePanelMessage::SendImgCodeToEditor(code))
+                }
+                FileTreeMessage::AskIsLoadPermitted => {
+                    Task::done(FilePanelMessage::AskIsLoadPermitted)
                 }
                 _ => self
                     .file_tree
@@ -125,7 +133,9 @@ impl FilePanel {
             }
             FilePanelMessage::ImportImgFolder => {
                 Task::perform(operation::open_img_folder_dialog(), |result| match result {
-                    Some(path) => FilePanelMessage::FileTree(FileTreeMessage::FetchImgHandles(path)),
+                    Some(path) => {
+                        FilePanelMessage::FileTree(FileTreeMessage::FetchImgHandles(path))
+                    }
                     None => FilePanelMessage::HandleError(AppError::FilePanelError(
                         "文件路径为空!".to_string(),
                     )),
@@ -153,9 +163,9 @@ impl FilePanel {
             FilePanelMessage::SaveAs(file_data) => Task::done(FilePanelMessage::FileTree(
                 FileTreeMessage::SaveAs(file_data),
             )),
-            FilePanelMessage::GetImgIdFromPreview(id) => {
-                Task::done(FilePanelMessage::FileTree(FileTreeMessage::CopyImgFileData(id)))
-            }
+            FilePanelMessage::GetImgIdFromPreview(id) => Task::done(FilePanelMessage::FileTree(
+                FileTreeMessage::CopyImgFileData(id),
+            )),
             FilePanelMessage::HandleError(error) => {
                 info!("{}", error.to_string());
                 Task::none()

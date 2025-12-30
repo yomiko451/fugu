@@ -17,6 +17,8 @@ pub struct FileTree {
     pub all_nodes: HashMap<u32, FileNode>,
     hovered_file_node_id: Option<u32>,
     selected_node_id: Option<u32>,
+    // 暂时缓存用户选择的节点
+    _selected_node_id_cache: Option<u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -35,6 +37,8 @@ pub enum FileTreeMessage {
     SaveAs(FileData),
     ReturnSaveResult(Result<(), AppError>),
     SendFileDataToEditor(FileData),
+    AskIsLoadPermitted,
+    LoadPermitted,
     SendImgCodeToEditor(String),
     SendImgDataToPreview(Vec<ImgData>),
     SendImgBasePathToPreview(PathBuf),
@@ -53,6 +57,7 @@ impl FileTree {
             temp_workplace_root_key: None,
             temp_img_library_root_key: None,
             selected_node_id: None,
+            _selected_node_id_cache: None,
             hovered_file_node_id: None,
         };
         file_panel
@@ -157,17 +162,24 @@ impl FileTree {
             FileTreeMessage::ChangeSelectedNode(key) => {
                 if let Some(selected_file_node) = self.all_nodes.get_mut(&key) {
                     if selected_file_node.is_directory() {
-                        selected_file_node.reverse_expanded_if_node_is_directory();
+                        selected_file_node.reverse_expanded_if_directory();
                         return Task::none();
                     } else {
-                        self.selected_node_id = Some(key);
-                        return Task::done(FileTreeMessage::LoadSelectedNodeData);
+                        self._selected_node_id_cache = Some(key);
+                        return Task::done(FileTreeMessage::AskIsLoadPermitted);
                     }
                 } else {
                     Task::done(FileTreeMessage::HandleError(AppError::FilePanelError(
                         "[FileTree-ChangeSelectedNode]:找不到指定id的节点!".to_string(),
                     )))
                 }
+            }
+            FileTreeMessage::LoadPermitted => {
+                if let Some(id) = self._selected_node_id_cache {
+                    self.selected_node_id = Some(id);
+                    return Task::done(FileTreeMessage::LoadSelectedNodeData);
+                }
+                Task::none()
             }
             FileTreeMessage::LoadSelectedNodeData => {
                 if let Some(node) = self
@@ -218,13 +230,17 @@ impl FileTree {
                                 if let Ok(MdFile {
                                     version,
                                     path: None,
-                                    ..
+                                    cache,
                                 }) = node.try_get_md()
                                 {
+                                    let content = match cache {
+                                        Some(content) => Arc::clone(content),
+                                        None => Arc::new(String::default()),
+                                    };
                                     let new_file_data = FileData {
                                         global_id: node.global_id,
                                         version: *version,
-                                        content: Arc::new(String::default()),
+                                        content,
                                     };
                                     return Task::done(FileTreeMessage::SendFileDataToEditor(
                                         new_file_data,
@@ -251,15 +267,7 @@ impl FileTree {
                         version: 0,
                         content: Arc::clone(&content),
                     };
-                    Task::done(FileTreeMessage::SendFileDataToEditor(file_data)).chain(Task::done(
-                        FileTreeMessage::SendImgBasePathToPreview(
-                            md_file
-                                .path
-                                .as_ref()
-                                .expect("前置逻辑必定合法路径不会出错!")
-                                .clone(),
-                        ),
-                    ))
+                    Task::done(FileTreeMessage::SendFileDataToEditor(file_data))
                 })
                 .unwrap_or(Task::done(FileTreeMessage::HandleError(
                     AppError::FilePanelError(
@@ -300,8 +308,11 @@ impl FileTree {
                     {
                         *file_path = Some(path.clone())
                     }
-                    Task::done(FileTreeMessage::SaveFile(path, file_data.content.clone()))
-                        .chain(Task::done(FileTreeMessage::SendFileDataToEditor(file_data)))
+                    Task::done(FileTreeMessage::SaveFile(
+                        path.clone(),
+                        file_data.content.clone(),
+                    ))
+                    .chain(Task::done(FileTreeMessage::SendImgBasePathToPreview(path)))
                 })
                 .unwrap_or(Task::done(FileTreeMessage::HandleError(
                     AppError::FilePanelError(
@@ -354,7 +365,6 @@ impl FileTree {
                         // 新文件没有路径必须保存一次确定路径才能插入图片
                         // 弹窗询问用户如何操作
                         // TODO
-                        
                     } else {
                         if let Some((md_path, img_path)) =
                             md_node.try_get_path().ok().and_then(|md_path| {

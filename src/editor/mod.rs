@@ -1,8 +1,6 @@
 use std::{path::PathBuf, sync::Arc};
 
-use crate::{
-    common::*,
-};
+use crate::common::*;
 use iced::{
     Background, Border, Color, Element, Length, Padding, Subscription, Task, Theme,
     border::Radius,
@@ -38,11 +36,14 @@ pub enum EditorMessage {
     FileSaveAs(FileData),
     SaveToFile(FileData),
     HandleSaveResult(Result<(), AppError>),
-
+    CheckSaveState,
+    LoadPermitted,
     LoadFileDataFromFilePanel(FileData),
     GetImgCodeFromFilePanel(String),
     // 各种模态窗口消息
-    OpenEditorTableDialog
+    OpenEditorTableDialog,
+    OpenConfirmDialog(String),
+    GetConfirmResult(bool),
 }
 
 impl Editor {
@@ -64,6 +65,35 @@ impl Editor {
         setting: &AppSetting,
     ) -> Task<EditorMessage> {
         match editor_message {
+            EditorMessage::CheckSaveState => {
+                // 加载新文件前先确认是否有没保存的文件
+                self.selected_file
+                    .as_ref()
+                    .and_then(|file_data| {
+                        self.original_version
+                            .map(|original_version| (file_data, original_version))
+                    })
+                    .map(|(file_data, original_version)| {
+                        if file_data.version != original_version {
+                            if setting.auto_save {
+                                Task::done(EditorMessage::AutoSaveToFile(file_data.clone()))
+                                    .chain(Task::done(EditorMessage::LoadPermitted))
+                            } else {
+                                let text = "是否丢弃未保存的更改？".to_string();
+                                Task::done(EditorMessage::OpenConfirmDialog(text))
+                            }
+                        } else {
+                            Task::done(EditorMessage::LoadPermitted)
+                        }
+                    })
+                    .unwrap_or(Task::done(EditorMessage::LoadPermitted))
+            }
+            EditorMessage::GetConfirmResult(is_user_agreed) => {
+                if is_user_agreed {
+                    return Task::done(EditorMessage::LoadPermitted);
+                }
+                Task::none()
+            }
             EditorMessage::EditorAction(action) => {
                 //self.history.push_back(action.clone());
                 let is_edit = action.is_edit();
@@ -73,13 +103,11 @@ impl Editor {
                     if let Some(file_data) = &mut self.selected_file {
                         file_data.version += 1;
                         file_data.content = Arc::clone(&new_input);
-                        return Task::done(EditorMessage::SendNewContentToPreview(
-                            new_input
-                        ))
-                        .chain(Task::perform(
-                            Editor::set_auto_save_delay_timer(file_data.version),
-                            EditorMessage::AutoSaveCheck,
-                        ));
+                        return Task::done(EditorMessage::SendNewContentToPreview(new_input))
+                            .chain(Task::perform(
+                                Editor::set_auto_save_delay_timer(file_data.version),
+                                EditorMessage::AutoSaveCheck,
+                            ));
                     }
                 }
                 Task::none()

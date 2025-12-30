@@ -150,8 +150,6 @@ pub const MENU_WIDTH: f32 = 150.;
 pub const MENU_OFFSET: f32 = 5.;
 
 // 编辑区相关常量
-pub const TABLE_DIALOG_HEIGHT: u32 = 150;
-pub const TABLE_DIALOG_WIDTH: u32 = 200;
 pub const H1_COLOR: Color = Color::from_rgb8(229, 192, 123);
 pub const H2_COLOR: Color = Color::from_rgb8(198, 120, 221);
 pub const H3_COLOR: Color = Color::from_rgb8(97, 175, 239);
@@ -165,7 +163,10 @@ pub const QUOTE_MARK_COLOR: Color = Color::from_rgb8(224, 108, 117);
 //pub const PREVIEW_BG_COLOR: Color = Color::from_rgb8(47, 52, 62);
 
 
-
+// 模态窗口常量
+pub const TABLE_DIALOG_HEIGHT: u32 = 150;
+pub const TABLE_DIALOG_WIDTH: u32 = 200;
+pub const CONFIRM_DIALOG_WIDTH: u32 = 450;
 
 
 

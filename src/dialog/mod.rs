@@ -4,10 +4,13 @@ use iced::{
     widget::{center, container, opaque, space, stack},
 };
 
-use crate::dialog::{confirm::ConfirmDialog, editor_table::EditorTableDialogMessage};
+use crate::dialog::{
+    confirm::{ConfirmDialog, ConfirmDialogMessage},
+    editor_table::EditorTableDialogMessage,
+};
 
-mod editor_table;
 mod confirm;
+mod editor_table;
 
 #[derive(Debug, Default, Clone)]
 pub struct Dialog {
@@ -21,14 +24,16 @@ pub enum DialogType {
     #[default]
     NoDialog,
     EditorTable,
-    Confirm
+    Confirm,
 }
 
 #[derive(Debug, Clone)]
 pub enum DialogMessage {
     OpenEditorTableDialog,
     OpenConfirmDialog(String),
-    EditorTableMessage(EditorTableDialogMessage),
+    EditorTableDialogMessage(EditorTableDialogMessage),
+    ConfirmDialogMessage(ConfirmDialogMessage),
+    SendConfirmResult(bool)
 }
 
 impl Dialog {
@@ -36,7 +41,7 @@ impl Dialog {
         Self {
             current_dialog: DialogType::default(),
             editor_table: EditorTableDialog::default(),
-            confirm: ConfirmDialog::default()
+            confirm: ConfirmDialog::default(),
         }
     }
 
@@ -46,16 +51,36 @@ impl Dialog {
                 self.current_dialog = DialogType::EditorTable;
                 Task::none()
             }
-            DialogMessage::EditorTableMessage(editor_table_message) => match editor_table_message {
-                EditorTableDialogMessage::CloseDialog => {
-                    self.current_dialog = DialogType::default();
-                    Task::none()
+            DialogMessage::OpenConfirmDialog(text) => {
+                self.current_dialog = DialogType::Confirm;
+                Task::done(DialogMessage::ConfirmDialogMessage(
+                    ConfirmDialogMessage::LoadConfirmText(text),
+                ))
+            }
+            DialogMessage::EditorTableDialogMessage(editor_table_message) => {
+                match editor_table_message {
+                    EditorTableDialogMessage::CloseDialog => {
+                        self.current_dialog = DialogType::default();
+                        Task::none()
+                    }
+                    _ => self
+                        .editor_table
+                        .update(editor_table_message)
+                        .map(DialogMessage::EditorTableDialogMessage),
                 }
-                _ => self
-                    .editor_table
-                    .update(editor_table_message)
-                    .map(DialogMessage::EditorTableMessage),
-            },
+            }
+            DialogMessage::ConfirmDialogMessage(confirm_dialog_message) => {
+                match confirm_dialog_message {
+                    ConfirmDialogMessage::SendConfirmResult(is_user_agreed) => {
+                        self.current_dialog = DialogType::default();
+                    Task::done(DialogMessage::SendConfirmResult(is_user_agreed))
+                    }
+                    _ => self
+                        .confirm
+                        .update(confirm_dialog_message)
+                        .map(DialogMessage::ConfirmDialogMessage),
+                }
+            }
             _ => Task::none(),
         }
     }
@@ -65,7 +90,8 @@ impl Dialog {
             DialogType::EditorTable => self
                 .editor_table
                 .view()
-                .map(DialogMessage::EditorTableMessage),
+                .map(DialogMessage::EditorTableDialogMessage),
+            DialogType::Confirm => self.confirm.view().map(DialogMessage::ConfirmDialogMessage),
             _ => space().into(),
         }
     }

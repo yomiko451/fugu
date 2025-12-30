@@ -1,6 +1,5 @@
 use iced::{
-    Alignment, Background, Border, Element, Length, Padding, Task, Theme, mouse,
-    widget::{column, container, mouse_area, row, space, text, text_input},
+    Alignment, Background, Border, Color, Element, Length, Padding, Task, Theme, mouse, widget::{column, container, mouse_area, row, space, text, text_input}
 };
 
 use crate::common::*;
@@ -80,7 +79,7 @@ impl EditorTableDialog {
                 background: Some(Background::Color(ex_palette.background.weaker.color)),
                 shadow: SHADOW_BASE_0_OFFSET,
                 border: Border {
-                    color: ex_palette.background.weaker.color,
+                    color: Color::TRANSPARENT,
                     ..DEFAULT_BORDER
                 },
                 ..Default::default()
