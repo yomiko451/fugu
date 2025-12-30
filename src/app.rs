@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use crate::{
-    common::{AppSetting, DEFAULT_SETTING},
-    dialog::{self, Dialog, DialogMessage},
+    common::*,
+    dialog::{Dialog, DialogMessage},
     editor::{Editor, EditorMessage},
     file_panel::{FilePanel, FilePanelMessage},
     menu_bar::{MenuBar, MenuBarMessage},
@@ -45,7 +45,7 @@ impl App {
             file_panel: FilePanel::new(),
             menu_bar: MenuBar::new(),
             dialog: Dialog::new(),
-            setting: DEFAULT_SETTING,
+            setting: DEFAULT_USER_SETTING,
         };
         let task = Task::batch([Task::none()]);
         (app, task)

@@ -1,3 +1,5 @@
+use iced::{Font, Settings};
+
 use crate::{app::App, common::*};
 
 mod common;
@@ -15,5 +17,6 @@ fn main() -> iced::Result {
         .title(APP_NAME)
         .window_size(DEFAULT_WINDOW_SIZE)
         .theme(DEFAULT_THEME.clone())
+        .settings(DEFAULT_APP_SETTING.clone())
         .run()
 }

@@ -1,5 +1,5 @@
 use std::{path::PathBuf, sync::{Arc, LazyLock}};
-use iced::{Border, Color, Shadow, Theme, Vector, border::Radius, theme::Palette, widget::image};
+use iced::{Border, Color, Font, Settings, Shadow, Theme, Vector, border::Radius, font, theme::Palette, widget::image};
 // 这里定义各种公共类型
 // FileData用于文件区和编辑区交互
 #[derive(Debug, Clone)]
@@ -120,10 +120,19 @@ pub const SHADOW_BASE_0_OFFSET: Shadow = Shadow {
     offset: Vector::ZERO
 };
 // 默认设置
-pub const DEFAULT_SETTING: AppSetting = AppSetting {
+pub const DEFAULT_USER_SETTING: AppSetting = AppSetting {
     auto_save: false
 };
-
+// 默认aaa设置
+pub const DEFAULT_APP_SETTING: LazyLock<Settings> = LazyLock::new(|| {
+    Settings {
+        fonts: vec![
+            include_bytes!("../../assets/NotoSansMonoCJKsc-VF.ttf").into()
+        ],
+        default_font: Font::with_name("Noto Sans Mono CJK SC"),
+        ..Default::default()
+    }
+});
 
 // 文件区相关常量
 pub const TEXT_INDENTATION: u16 = 15;
