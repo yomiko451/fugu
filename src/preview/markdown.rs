@@ -28,7 +28,7 @@ pub struct Markdown {
 }
 
 #[derive(Debug, Clone)]
-pub struct Img {
+pub struct ImgHandle {
     ab_path: PathBuf,
     handle: image::Handle
 }
@@ -40,6 +40,7 @@ pub enum MarkdownMessage {
     RenderMarkdown,
     HandleImageUrl(Vec<(PathBuf, String)>),
     InsertImageToDict(Vec<(String, image::Handle)>),
+    SendImgUrlToFilePanel(Vec<PathBuf>),
     LinkClicked(iced_markdown::Uri),
 }
 
@@ -68,13 +69,10 @@ impl Markdown {
                             })
                             // TODO
                             // 这里需要大量重写，采用缓存机制，
-                            // 编辑过程中只暂时用缓存handle预览图片,保存时再创建fugu-images并复制文件
-                            // 删除file_panel到preview的path传递，只需要保存时检查markdown的images确认是否要拷贝即可
+                            // 编辑过程中只暂时用缓存handle预览图片,保存时再创建文件同名文件夹并复制图片文件过去
                             // 如果用户直接输入的绝对路径，照常载入handle到markdown的images
                             // 如果用户通过图片面板插入，preview内部markdown和image_gallery通信传递handle即可
-                            // 如此一来新文件也可以再保存后有路径了再解决图片插入问题
-                            // 用户输入的源码尽量不动，重点在于源码路径与真实路径间的映射与文件拷贝
-                            
+                            // 用户输入的源码尽量不动，重点在于源码路径与真实路径间的映射与文件拷贝                        
                             
                             .map(|url| (path.parent().expect("必定合法路径不应当出错!").join(url), url.to_string()))
                             .collect::<Vec<(PathBuf, String)>>();
@@ -83,7 +81,10 @@ impl Markdown {
                 }
                 Task::none()
             }
-            MarkdownMessage::HandleImageUrl(url_vec) => Task::future(async {
+            MarkdownMessage::HandleImageUrl(url_vec) => 
+            // TODO 让file_panel读取图片，用read_many_img_files函数
+            // 还要额外做各种处理最后统一存成ImgHandle
+            Task::future(async {
                 tokio::task::spawn_blocking(|| {
                     url_vec
                         .into_iter()

@@ -49,6 +49,11 @@ impl From<std::io::Error> for AppError {
         AppError::FilePanelError(value.to_string())
     }
 }
+impl From<tokio::task::JoinError> for AppError {
+    fn from(value: tokio::task::JoinError) -> Self {
+        AppError::FilePanelError(value.to_string())
+    }
+}
 
 //这里主要定义各种常量
 // 

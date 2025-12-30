@@ -79,25 +79,21 @@ impl FileNode {
             _ => Err(AppError::FilePanelError("该节点不是文件夹!".to_string())),
         }
     }
-    
+
     pub fn is_children_empty(&self) -> bool {
         match self {
             FileNode {
-                node_content: NodeContent::DirectoryMd(Dir {children,..}),
+                node_content: NodeContent::DirectoryMd(Dir { children, .. }),
                 ..
-            } => {
-                children.is_empty()
-            }
+            } => children.is_empty(),
             FileNode {
-                node_content: NodeContent::DirectoryTemp(TempDir {children,..}),
+                node_content: NodeContent::DirectoryTemp(TempDir { children, .. }),
                 ..
-            } => {
-                children.is_empty()
-            }
-            _ => true
+            } => children.is_empty(),
+            _ => true,
         }
     }
-    
+
     pub fn try_get_img(&self) -> Result<&ImageFile, AppError> {
         match self {
             FileNode {
@@ -314,6 +310,26 @@ pub async fn read_img_file(path: PathBuf) -> Result<(PathBuf, image::Handle), Ap
     Ok((path, handle))
 }
 
+pub async fn read_many_img_files(
+    mut path_vec: Vec<PathBuf>,
+) -> Result<Vec<(PathBuf, image::Handle)>, AppError> {
+    let mut tasks = vec![];
+    let mut handles = vec![];
+    for (index, path) in path_vec.iter().cloned().enumerate() {
+        let task = tokio::spawn(tokio::fs::read(path));
+        tasks.push((index, task));
+    }
+    for (index, task) in tasks {
+        let bytes = task.await??;
+        handles.push((
+            std::mem::take(&mut path_vec[index]),
+            image::Handle::from_bytes(bytes),
+        ))
+    }
+
+    Ok(handles)
+}
+
 pub async fn save_file(path: PathBuf, content: Arc<String>) -> Result<(), AppError> {
     let mut file = tokio::fs::File::create(path).await?;
     file.write_all(content.as_bytes()).await?;
@@ -415,7 +431,7 @@ pub async fn fetch_img_handle(root_path: PathBuf) -> Result<HashMap<u32, FileNod
 
 pub async fn copy_img_to_folder(md_path: PathBuf, img_path: PathBuf) -> Result<String, AppError> {
     let parent_path = md_path.parent().expect("必定合法路径不应当出错!");
-    let img_folder_path = parent_path.join("fugu-images");
+    let img_folder_path = parent_path.join(md_path.file_stem().expect("必定合法路径不应当出错!"));
     let img_file_name = img_path.file_name().expect("必定合法路径不应当出错!");
     let new_img_path = img_folder_path.join(img_file_name);
     if tokio::fs::try_exists(&img_folder_path).await? {
@@ -426,7 +442,7 @@ pub async fn copy_img_to_folder(md_path: PathBuf, img_path: PathBuf) -> Result<S
         tokio::fs::create_dir(img_folder_path).await?;
         tokio::fs::copy(&img_path, &new_img_path).await?;
     }
-    let code = format!("![](fugu-images/{})\n\n", img_file_name.to_string_lossy());
+    let code = format!("![]({})\n\n", img_file_name.to_string_lossy());
     Ok(code)
 }
 
@@ -440,7 +456,8 @@ pub fn view_node(
 ) -> Column<'_, FileTreeMessage> {
     let node = all_file_nodes.get(&key).expect("前置逻辑不会出错!");
     let mut row = Row::new();
-    let children_node_view = if let Ok(children) = node.try_get_children() && !children.is_empty() 
+    let children_node_view = if let Ok(children) = node.try_get_children()
+        && !children.is_empty()
     {
         let mut column = Column::new().height(match node.is_expanded() {
             false => {
@@ -490,7 +507,10 @@ pub fn view_node(
                     .size(FONT_SIZE_SMALLER)
                     .wrapping(text::Wrapping::None),
             )
-            .padding(Padding::from([PADDING_SMALLEST, (depth * TEXT_INDENTATION) as f32])),
+            .padding(Padding::from([
+                PADDING_SMALLEST,
+                (depth * TEXT_INDENTATION) as f32,
+            ])),
         )
         .width(Length::Fill)
         .style(move |theme: &Theme| {
